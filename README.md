@@ -105,10 +105,6 @@ python -m pytest tests/
 
 Parser/protocol tests have no HA imports — they run on plain Python.
 
-## License
-
-MIT — see [LICENSE](LICENSE).
-
 ## Disclaimer
 
 This project is independent and not affiliated with, endorsed by, or supported by Miele & Cie. KG. **Miele®** and **Miele@home®** are registered trademarks of Miele & Cie. KG; the appliance model names (KM, H, DGC, G, WWG, TWC, KF, KFN, KWT, KWNS, ESW, CVA, DA) are likewise Miele trademarks used here purely for identification. Use of this software may void your appliance warranty — use at your own risk.
