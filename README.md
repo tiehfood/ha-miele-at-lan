@@ -1,17 +1,17 @@
 <p align="center">
-  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=tiehfood&repository=miele&category=integration">
+  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=tiehfood&repository=ha-miele-at-lan&category=integration">
     <img alt="Open in HACS" src="https://my.home-assistant.io/badges/hacs_repository.svg"/>
   </a>
 </p>
 <p align="center">
-  <a href="https://github.com/tiehfood/miele/releases/latest">
-    <img alt="Latest release" src="https://img.shields.io/github/v/release/tiehfood/miele?label=release"/>
+  <a href="https://github.com/tiehfood/ha-miele-at-lan/releases/latest">
+    <img alt="Latest release" src="https://img.shields.io/github/v/release/tiehfood/ha-miele-at-lan?label=release"/>
   </a>
   <a href="https://www.home-assistant.io">
     <img alt="HA 2024.12+" src="https://img.shields.io/badge/HA-2024.12%2B-blue.svg"/>
   </a>
   <a href="LICENSE">
-    <img alt="License" src="https://img.shields.io/github/license/tiehfood/miele.svg"/>
+    <img alt="License" src="https://img.shields.io/github/license/tiehfood/ha-miele-at-lan.svg"/>
   </a>
   <a href="https://www.buymeacoffee.com/tiehfood">
     <img alt="Buy Me A Coffee" src="https://raw.githubusercontent.com/pachadotdev/buymeacoffee-badges/main/bmc-orange.svg"/>
@@ -51,9 +51,9 @@ Diagnostic entities (raw enums, WLAN info, push state, firmware version) are cre
 
 ### HACS
 
-[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=tiehfood&repository=miele&category=integration)
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=tiehfood&repository=ha-miele-at-lan&category=integration)
 
-Or manually: HACS → ⋮ → Custom repositories → add `https://github.com/tiehfood/miele` as **Integration** → install → restart HA.
+Or manually: HACS → ⋮ → Custom repositories → add `https://github.com/tiehfood/ha-miele-at-lan` as **Integration** → install → restart HA.
 
 ### Manual
 
@@ -96,7 +96,7 @@ logger:
 ## Development
 
 ```sh
-git clone https://github.com/tiehfood/miele
+git clone https://github.com/tiehfood/ha-miele-at-lan
 cd miele
 python3 -m venv virtenv && . virtenv/bin/activate
 pip install -e .

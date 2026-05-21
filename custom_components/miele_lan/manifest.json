@@ -4,10 +4,10 @@
   "codeowners": ["@tiehfood"],
   "config_flow": true,
   "dependencies": ["zeroconf"],
-  "documentation": "https://github.com/tiehfood/miele",
+  "documentation": "https://github.com/tiehfood/ha-miele-at-lan",
   "integration_type": "hub",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/tiehfood/miele/issues",
+  "issue_tracker": "https://github.com/tiehfood/ha-miele-at-lan/issues",
   "requirements": ["asyncmiele==0.2.6", "cryptography>=41.0.0"],
   "version": "1.0.0",
   "zeroconf": [
