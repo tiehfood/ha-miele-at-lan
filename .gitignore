@@ -1,7 +1,6 @@
 # --- Claude / development context ---
 .claude/
 tools/
-tests/
 docs/
 .idea/
 *.iml
@@ -74,5 +73,5 @@ bin/
 
 ### Mac OS ###
 .DS_Store
-/de_miele_infocontrol_v4.17.3.apk
+*.apk
 .miele_oauth_*.json
