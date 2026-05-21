@@ -1,14 +1,24 @@
-"""Tests for the provisioning CLI's key generation + payload shapes."""
+"""Tests for the provisioning CLI's key generation + payload shapes.
+
+The CLI lives under `tools/` which is gitignored (RE tooling, not shipped via
+HACS). When running CI on a fresh checkout the module isn't available, so the
+whole module is skipped instead of failing collection.
+"""
 
 import re
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
-import miele_lan_provision as prov  # type: ignore
+prov = pytest.importorskip(
+    "miele_lan_provision",
+    reason="tools/miele_lan_provision.py is gitignored; skip when not present locally",
+)
 
 
 def test_generate_keys_format() -> None:
