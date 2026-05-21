@@ -1,0 +1,6 @@
+{
+  "name": "Miele@LAN",
+  "render_readme": true,
+  "country": ["DE", "AT", "CH"],
+  "homeassistant": "2025.6.0"
+}

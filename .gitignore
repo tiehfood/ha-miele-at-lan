@@ -1,0 +1,78 @@
+# --- Claude / development context ---
+.claude/
+tools/
+tests/
+docs/
+.idea/
+*.iml
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# --- Virtualenvs ---
+virtenv/
+venv/
+.venv/
+env/
+ENV/
+
+# --- HA dev artefacts ---
+config/
+.storage/
+home-assistant.log
+
+# --- Reverse-engineering scratch (do not commit) ---
+research/
+scratch/
+*.pcap
+*.pcapng
+keys.json
+
+### IntelliJ IDEA ###
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+.kotlin
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+/de_miele_infocontrol_v4.17.3.apk
+.miele_oauth_*.json
