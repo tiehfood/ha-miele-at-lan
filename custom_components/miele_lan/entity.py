@@ -63,19 +63,24 @@ class MieleLanEntity(CoordinatorEntity[MieleLanCoordinator]):
         device_type = coord.device_type
         model_label = _MODEL_LABELS.get(device_type)
 
-        # Combine the XKM WiFi-module hardware tech-type with the appliance's
-        # Material Number so both show up in HA's device card under "Hardware".
+        # Combine the XKM WiFi-module hardware tech-type, the appliance's
+        # Material Number, and the LAN IP so all three show on the "Hardware"
+        # line in HA's device card. HA's DeviceInfo schema has no dedicated
+        # `ip_address` field — appending here is the standard workaround.
         xkm_tech = ident.get("xkm_tech_type") or ""
         mat = ident.get("mat_number") or ""
-        if xkm_tech and mat:
-            hw_version = f"{xkm_tech} (Mat. {mat})"
-        else:
-            hw_version = xkm_tech or mat or None
-
-        # Surface the appliance IP in the HA device card via configuration_url
-        # — renders as a clickable "Visit device" link, and the IP itself is
-        # shown next to it in the card header.
         host = getattr(coord.client, "host", None)
+        parts: list[str] = []
+        if xkm_tech:
+            parts.append(xkm_tech)
+        if mat:
+            parts.append(f"(Mat. {mat})")
+        if host:
+            parts.append(f"@ {host}")
+        hw_version = " ".join(parts) or None
+
+        # Also expose as configuration_url so HA renders the "Visit device"
+        # link at the bottom of the device card.
         configuration_url = f"http://{host}/" if host else None
 
         return DeviceInfo(
