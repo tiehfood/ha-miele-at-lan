@@ -1,6 +1,9 @@
 # --- Claude / development context ---
 .claude/
-tools/
+# tools/ is gitignored — the directory contents are RE scratchpads. The
+# only public-facing helper is the provisioning CLI referenced from README.
+tools/*
+!tools/miele_lan_provision.py
 docs/
 .idea/
 *.iml
