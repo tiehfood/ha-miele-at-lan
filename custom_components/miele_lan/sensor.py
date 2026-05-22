@@ -149,6 +149,54 @@ def _gated(getter: Callable[[dict[str, Any]], Any]) -> Callable[[dict[str, Any]]
     return fn
 
 
+def _hob_booster(state: dict[str, Any], zone: int) -> int:
+    """Return per-zone booster level from ExtendedState.
+
+    Layout RE'd from `Miele.Modules.Hobs.ApplianceCommunication.ApplianceData.Dop1.dll`
+    `MACI_DS_HobExtendedData` (DOP2 object id 4711). Verified live on KM7576
+    with Boost I on zone 3 → ExtendedState[15] == 0x48, bits 6-7 == 0b01.
+
+    `ExtendedState` is a hex-encoded 62-byte blob. Per-zone byte layout:
+        PowerLevelZone<n>  at offset  8 + 3*(n-1)
+        InfoZone<n>        at offset  9 + 3*(n-1)
+        ErrorHintZone<n>   at offset 10 + 3*(n-1)
+
+    Inside InfoZone<n>, bits 6-7 = Boosterfunktion (LSB-numbered):
+        0 = off, 1 = Boost I, 2 = Boost II, 3 = Boost III
+
+    Returns 0 when ExtendedState is missing, too short, or booster bits are 0.
+    """
+    ext = state.get("ExtendedState")
+    if not isinstance(ext, str):
+        return 0
+    try:
+        b = bytes.fromhex(ext)
+    except ValueError:
+        return 0
+    off = 9 + 3 * zone  # zone is 0-indexed; InfoZone<zone+1> lives here
+    if off >= len(b):
+        return 0
+    return (b[off] >> 6) & 0x3
+
+
+def _hob_plate_step(state: dict[str, Any], zone: int) -> str | None:
+    """Resolve a hob zone's display value, prefer Booster over Level.
+
+    Mirrors the APK's `MapPowerlevelToLevel`: if `Booster` is non-zero, show
+    "boost" / "boost_2" / "boost_3"; otherwise look up `PlateStep` in
+    `HobPlateStep`. On newer K-modules (KM7576 / EK039W) the booster lives
+    in `ExtendedState` and *not* in `PlateStep`, so this dual lookup is the
+    only way to surface boost over LAN.
+    """
+    plate = state.get("PlateStep") or []
+    if zone >= len(plate):
+        return None
+    booster = _hob_booster(state, zone)
+    if booster:
+        return {1: "boost", 2: "boost_2", 3: "boost_3"}[booster]
+    return enums.HobPlateStep.get(plate[zone])
+
+
 def _temp_or_none(temps: Any, idx: int, *, divisor: int = 100) -> int | float | None:
     """Read the i-th element of /State.Temperature (or .TargetTemperature).
     Returns None for the `-32768` sentinel (unsupported)."""
@@ -468,20 +516,17 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             value_fn=lambda s: _enum(s, "DryingStep", enums.StateDryingStep),
         ),
     ),
-    # Hob — per-zone power step (PlateStep[N]). Each zone exposed as its own
-    # sensor; values mapped through the PlatePowerStep enum (0=off, 1..18=
-    # level, 110/220=warming, 117/118/218=boost, 217=boost+).
+    # Hob — per-zone power step (PlateStep[N]) plus per-zone Booster from
+    # ExtendedState. On newer K-modules (KM7576 / EK039W) PlateStep stays at
+    # the base level while Booster is encoded as bits 6-7 of InfoZone<N>
+    # inside ExtendedState. See _hob_plate_step + _hob_booster helpers.
     *(
         MieleLanSensorDef(
             types=HOB_FAMILY,
             description=MieleLanSensorDescription(
                 key=f"plate_{n}_step",
                 translation_key=f"plate_{n}_step",
-                value_fn=lambda s, _i=n - 1: (
-                    enums.HobPlateStep.get((s.get("PlateStep") or [0])[_i])
-                    if _i < len(s.get("PlateStep") or [])
-                    else None
-                ),
+                value_fn=lambda s, _i=n - 1: _hob_plate_step(s, _i),
             ),
         )
         for n in range(1, 7)

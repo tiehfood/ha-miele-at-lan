@@ -1019,7 +1019,9 @@
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
-          "residual_heat_high": "Residual heat (high)"
+          "residual_heat_high": "Residual heat (high)",
+          "boost_2": "Boost II",
+          "boost_3": "Boost III"
         }
       },
       "plate_1_remaining_heat": {
@@ -1043,7 +1045,9 @@
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
-          "residual_heat_high": "Residual heat (high)"
+          "residual_heat_high": "Residual heat (high)",
+          "boost_2": "Boost II",
+          "boost_3": "Boost III"
         }
       },
       "plate_2_remaining_heat": {
@@ -1067,7 +1071,9 @@
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
-          "residual_heat_high": "Residual heat (high)"
+          "residual_heat_high": "Residual heat (high)",
+          "boost_2": "Boost II",
+          "boost_3": "Boost III"
         }
       },
       "plate_3_remaining_heat": {
@@ -1091,7 +1097,9 @@
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
-          "residual_heat_high": "Residual heat (high)"
+          "residual_heat_high": "Residual heat (high)",
+          "boost_2": "Boost II",
+          "boost_3": "Boost III"
         }
       },
       "plate_4_remaining_heat": {
@@ -1115,7 +1123,9 @@
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
-          "residual_heat_high": "Residual heat (high)"
+          "residual_heat_high": "Residual heat (high)",
+          "boost_2": "Boost II",
+          "boost_3": "Boost III"
         }
       },
       "plate_5_remaining_heat": {
@@ -1139,7 +1149,9 @@
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
-          "residual_heat_high": "Residual heat (high)"
+          "residual_heat_high": "Residual heat (high)",
+          "boost_2": "Boost II",
+          "boost_3": "Boost III"
         }
       },
       "plate_6_remaining_heat": {

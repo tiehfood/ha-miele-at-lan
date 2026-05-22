@@ -1,15 +1,22 @@
 {
   "domain": "miele_lan",
   "name": "Miele@LAN",
-  "codeowners": ["@tiehfood"],
+  "codeowners": [
+    "@tiehfood"
+  ],
   "config_flow": true,
-  "dependencies": ["zeroconf"],
+  "dependencies": [
+    "zeroconf"
+  ],
   "documentation": "https://github.com/tiehfood/ha-miele-at-lan",
   "integration_type": "hub",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/tiehfood/ha-miele-at-lan/issues",
-  "requirements": ["asyncmiele==0.2.6", "cryptography>=41.0.0"],
-  "version": "1.0.0",
+  "requirements": [
+    "asyncmiele==0.2.6",
+    "cryptography>=41.0.0"
+  ],
+  "version": "1.1.0",
   "zeroconf": [
     {
       "type": "_mieleathome._tcp.local."

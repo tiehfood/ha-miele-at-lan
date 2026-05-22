@@ -1020,7 +1020,9 @@
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
-          "residual_heat_high": "Restwärme (hoch)"
+          "residual_heat_high": "Restwärme (hoch)",
+          "boost_2": "Booster II",
+          "boost_3": "Booster III"
         }
       },
       "plate_1_remaining_heat": {
@@ -1044,7 +1046,9 @@
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
-          "residual_heat_high": "Restwärme (hoch)"
+          "residual_heat_high": "Restwärme (hoch)",
+          "boost_2": "Booster II",
+          "boost_3": "Booster III"
         }
       },
       "plate_2_remaining_heat": {
@@ -1068,7 +1072,9 @@
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
-          "residual_heat_high": "Restwärme (hoch)"
+          "residual_heat_high": "Restwärme (hoch)",
+          "boost_2": "Booster II",
+          "boost_3": "Booster III"
         }
       },
       "plate_3_remaining_heat": {
@@ -1092,7 +1098,9 @@
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
-          "residual_heat_high": "Restwärme (hoch)"
+          "residual_heat_high": "Restwärme (hoch)",
+          "boost_2": "Booster II",
+          "boost_3": "Booster III"
         }
       },
       "plate_4_remaining_heat": {
@@ -1116,7 +1124,9 @@
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
-          "residual_heat_high": "Restwärme (hoch)"
+          "residual_heat_high": "Restwärme (hoch)",
+          "boost_2": "Booster II",
+          "boost_3": "Booster III"
         }
       },
       "plate_5_remaining_heat": {
@@ -1140,7 +1150,9 @@
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
-          "residual_heat_high": "Restwärme (hoch)"
+          "residual_heat_high": "Restwärme (hoch)",
+          "boost_2": "Booster II",
+          "boost_3": "Booster III"
         }
       },
       "plate_6_remaining_heat": {
