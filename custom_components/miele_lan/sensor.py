@@ -180,20 +180,21 @@ def _hob_booster(state: dict[str, Any], zone: int) -> int:
 
 
 def _hob_plate_step(state: dict[str, Any], zone: int) -> str | None:
-    """Resolve a hob zone's display value, prefer Booster over Level.
+    """Resolve a hob zone's display value, preferring Booster over Level.
 
-    Mirrors the APK's `MapPowerlevelToLevel`: if `Booster` is non-zero, show
-    "boost" / "boost_2" / "boost_3"; otherwise look up `PlateStep` in
-    `HobPlateStep`. On newer K-modules (KM7576 / EK039W) the booster lives
-    in `ExtendedState` and *not* in `PlateStep`, so this dual lookup is the
-    only way to surface boost over LAN.
+    Mirrors the APK's `MapPowerlevelToLevel`: if `Booster` is non-zero, the
+    UI labels it `Boost I` / `Boost II` / `Boost III` (Miele translation
+    keys `APP__KM_BOOSTER_{I,II,III}__INFO`); otherwise the base PlateStep
+    is shown via `HobPlateStep`. On newer K-modules (KM7576 / EK039W) the
+    booster lives in `ExtendedState` and *not* in `PlateStep`, so this dual
+    lookup is the only way to surface boost over LAN.
     """
     plate = state.get("PlateStep") or []
     if zone >= len(plate):
         return None
     booster = _hob_booster(state, zone)
     if booster:
-        return {1: "boost", 2: "boost_2", 3: "boost_3"}[booster]
+        return f"boost_{booster}"  # boost_1 / boost_2 / boost_3
     return enums.HobPlateStep.get(plate[zone])
 
 

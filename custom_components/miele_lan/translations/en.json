@@ -1014,14 +1014,15 @@
         "name": "Cooking zone 1 power",
         "state": {
           "off": "Off",
-          "boost": "Boost",
+          "boost": "Boost I",
           "boost_plus": "Boost+",
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
           "residual_heat_high": "Residual heat (high)",
           "boost_2": "Boost II",
-          "boost_3": "Boost III"
+          "boost_3": "Boost III",
+          "boost_1": "Boost I"
         }
       },
       "plate_1_remaining_heat": {
@@ -1040,14 +1041,15 @@
         "name": "Cooking zone 2 power",
         "state": {
           "off": "Off",
-          "boost": "Boost",
+          "boost": "Boost I",
           "boost_plus": "Boost+",
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
           "residual_heat_high": "Residual heat (high)",
           "boost_2": "Boost II",
-          "boost_3": "Boost III"
+          "boost_3": "Boost III",
+          "boost_1": "Boost I"
         }
       },
       "plate_2_remaining_heat": {
@@ -1066,14 +1068,15 @@
         "name": "Cooking zone 3 power",
         "state": {
           "off": "Off",
-          "boost": "Boost",
+          "boost": "Boost I",
           "boost_plus": "Boost+",
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
           "residual_heat_high": "Residual heat (high)",
           "boost_2": "Boost II",
-          "boost_3": "Boost III"
+          "boost_3": "Boost III",
+          "boost_1": "Boost I"
         }
       },
       "plate_3_remaining_heat": {
@@ -1092,14 +1095,15 @@
         "name": "Cooking zone 4 power",
         "state": {
           "off": "Off",
-          "boost": "Boost",
+          "boost": "Boost I",
           "boost_plus": "Boost+",
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
           "residual_heat_high": "Residual heat (high)",
           "boost_2": "Boost II",
-          "boost_3": "Boost III"
+          "boost_3": "Boost III",
+          "boost_1": "Boost I"
         }
       },
       "plate_4_remaining_heat": {
@@ -1118,14 +1122,15 @@
         "name": "Cooking zone 5 power",
         "state": {
           "off": "Off",
-          "boost": "Boost",
+          "boost": "Boost I",
           "boost_plus": "Boost+",
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
           "residual_heat_high": "Residual heat (high)",
           "boost_2": "Boost II",
-          "boost_3": "Boost III"
+          "boost_3": "Boost III",
+          "boost_1": "Boost I"
         }
       },
       "plate_5_remaining_heat": {
@@ -1144,14 +1149,15 @@
         "name": "Cooking zone 6 power",
         "state": {
           "off": "Off",
-          "boost": "Boost",
+          "boost": "Boost I",
           "boost_plus": "Boost+",
           "keep_warm": "Keep warm",
           "residual_heat_low": "Residual heat (low)",
           "residual_heat_medium": "Residual heat (medium)",
           "residual_heat_high": "Residual heat (high)",
           "boost_2": "Boost II",
-          "boost_3": "Boost III"
+          "boost_3": "Boost III",
+          "boost_1": "Boost I"
         }
       },
       "plate_6_remaining_heat": {

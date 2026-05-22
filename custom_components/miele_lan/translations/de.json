@@ -1015,14 +1015,15 @@
         "name": "Kochzone 1 Leistung",
         "state": {
           "off": "Aus",
-          "boost": "Booster",
+          "boost": "Booster I",
           "boost_plus": "Booster+",
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
           "residual_heat_high": "Restwärme (hoch)",
           "boost_2": "Booster II",
-          "boost_3": "Booster III"
+          "boost_3": "Booster III",
+          "boost_1": "Booster I"
         }
       },
       "plate_1_remaining_heat": {
@@ -1041,14 +1042,15 @@
         "name": "Kochzone 2 Leistung",
         "state": {
           "off": "Aus",
-          "boost": "Booster",
+          "boost": "Booster I",
           "boost_plus": "Booster+",
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
           "residual_heat_high": "Restwärme (hoch)",
           "boost_2": "Booster II",
-          "boost_3": "Booster III"
+          "boost_3": "Booster III",
+          "boost_1": "Booster I"
         }
       },
       "plate_2_remaining_heat": {
@@ -1067,14 +1069,15 @@
         "name": "Kochzone 3 Leistung",
         "state": {
           "off": "Aus",
-          "boost": "Booster",
+          "boost": "Booster I",
           "boost_plus": "Booster+",
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
           "residual_heat_high": "Restwärme (hoch)",
           "boost_2": "Booster II",
-          "boost_3": "Booster III"
+          "boost_3": "Booster III",
+          "boost_1": "Booster I"
         }
       },
       "plate_3_remaining_heat": {
@@ -1093,14 +1096,15 @@
         "name": "Kochzone 4 Leistung",
         "state": {
           "off": "Aus",
-          "boost": "Booster",
+          "boost": "Booster I",
           "boost_plus": "Booster+",
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
           "residual_heat_high": "Restwärme (hoch)",
           "boost_2": "Booster II",
-          "boost_3": "Booster III"
+          "boost_3": "Booster III",
+          "boost_1": "Booster I"
         }
       },
       "plate_4_remaining_heat": {
@@ -1119,14 +1123,15 @@
         "name": "Kochzone 5 Leistung",
         "state": {
           "off": "Aus",
-          "boost": "Booster",
+          "boost": "Booster I",
           "boost_plus": "Booster+",
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
           "residual_heat_high": "Restwärme (hoch)",
           "boost_2": "Booster II",
-          "boost_3": "Booster III"
+          "boost_3": "Booster III",
+          "boost_1": "Booster I"
         }
       },
       "plate_5_remaining_heat": {
@@ -1145,14 +1150,15 @@
         "name": "Kochzone 6 Leistung",
         "state": {
           "off": "Aus",
-          "boost": "Booster",
+          "boost": "Booster I",
           "boost_plus": "Booster+",
           "keep_warm": "Warmhalten",
           "residual_heat_low": "Restwärme (niedrig)",
           "residual_heat_medium": "Restwärme (mittel)",
           "residual_heat_high": "Restwärme (hoch)",
           "boost_2": "Booster II",
-          "boost_3": "Booster III"
+          "boost_3": "Booster III",
+          "boost_1": "Booster I"
         }
       },
       "plate_6_remaining_heat": {
