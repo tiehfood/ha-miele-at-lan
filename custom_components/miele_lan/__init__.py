@@ -21,6 +21,7 @@ from homeassistant.components import zeroconf as ha_zeroconf
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from .api import MieleLanClient
 from .cloud import refresh_access_token
@@ -38,7 +39,12 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import MieleLanCoordinator
-from .enrollment import DeviceIpResolver, enroll_all, mdns_discover_household
+from .enrollment import (
+    DeviceIpResolver,
+    cleanup_stale_subscriptions,
+    enroll_all,
+    mdns_discover_household,
+)
 from .push_listener import (
     MielePushListener,
     PushEvent,
@@ -82,6 +88,10 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     devices: list[dict[str, Any]] = list(entry.data.get(CONF_DEVICES) or [])
     ha_fab: str = entry.data[CONF_HA_FAB]
     ha_port: int = entry.data.get(CONF_HA_PORT, DEFAULT_HA_PUSH_PORT)
+    # Bootstrap fab→IP map from the direct-keys setup blob. mDNS results
+    # discovered below win over this on collision (a stale cached IP from
+    # config-flow time shouldn't beat what the appliance is announcing right
+    # now).
     static_ips: dict[str, str] = entry.data.get(CONF_STATIC_IPS) or {}
 
     if not devices:
@@ -161,36 +171,90 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             ha_port, err,
         )
         return False
+    except Exception as err:
+        # NotRunningException from zeroconf, or any other startup fault —
+        # release whatever the listener already grabbed and ask HA to retry.
+        # Without this, the leaked mDNS registration / bound port poisons the
+        # next setup attempt (issue #2).
+        await _safe_stop_listener(listener)
+        from zeroconf import NotRunningException  # local import — optional dep
+        if isinstance(err, NotRunningException):
+            raise ConfigEntryNotReady(
+                "HA's shared zeroconf is not running yet — retrying setup"
+            ) from err
+        raise
     bundle["listener"] = listener
 
-    resolver = DeviceIpResolver(static=merged_static_ips)
-    enrolled = await enroll_all(
-        devices,
-        group_id_hex=group_id,
-        group_key_hex=group_key,
-        ha_fab=ha_fab,
-        ha_hostname=listener.hostname,
-        ha_port=ha_port,
-        resolver=resolver,
-    )
-
-    for ed in enrolled:
-        client = MieleLanClient.from_hex(
-            host=ed.host_ip,
+    resolver = DeviceIpResolver(static=merged_static_ips, zeroconf=shared_zc)
+    try:
+        enrolled = await enroll_all(
+            devices,
             group_id_hex=group_id,
             group_key_hex=group_key,
-            route=ed.fab,
+            ha_fab=ha_fab,
+            ha_hostname=listener.hostname,
+            ha_port=ha_port,
+            resolver=resolver,
         )
-        await client.__aenter__()
-        bundle["clients"].append(client)
-        coord = MieleLanCoordinator(hass, entry, client, fab=ed.fab, enrollment=ed)
-        await coord.async_config_entry_first_refresh()
-        bundle["coordinators"][ed.fab] = coord
+    except Exception:
+        await _safe_stop_listener(listener)
+        raise
+
+    # Tidy up stale subscriptions from prior HA installs / fabs. The Miele
+    # firmware never re-uses slot numbers, so leftover subs from an old
+    # ha_fab keep accumulating until something deletes them. We sweep them
+    # on every entry setup so reload-recovery is automatic.
+    for ed in enrolled:
+        try:
+            n = await cleanup_stale_subscriptions(
+                host_ip=ed.host_ip, fab=ed.fab,
+                group_id_hex=group_id, group_key_hex=group_key,
+                our_ha_fab=ha_fab,
+            )
+            if n:
+                _LOGGER.info("[%s] removed %d stale subscription slot(s) at setup", ed.fab, n)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("[%s] stale-sub cleanup at setup failed: %s", ed.fab, err)
+
+    try:
+        for ed in enrolled:
+            client = MieleLanClient.from_hex(
+                host=ed.host_ip,
+                group_id_hex=group_id,
+                group_key_hex=group_key,
+                route=ed.fab,
+            )
+            await client.__aenter__()
+            bundle["clients"].append(client)
+            coord = MieleLanCoordinator(hass, entry, client, fab=ed.fab, enrollment=ed)
+            await coord.async_config_entry_first_refresh()
+            bundle["coordinators"][ed.fab] = coord
+    except Exception:
+        # Any failure here would otherwise leak the listener and all
+        # already-opened clients — see issue #2's NotRunningException loop.
+        await _safe_stop_listener(listener)
+        for client in bundle.get("clients", []):
+            try: await client.__aexit__(None, None, None)
+            except Exception: pass
+        raise
 
     if not bundle["coordinators"]:
-        await listener.stop()
-        _LOGGER.error("no devices reachable — aborting setup")
-        return False
+        # No device reachable on the LAN yet. This is recoverable: an
+        # appliance might be powered off, mDNS might be slow to populate,
+        # multicast might be temporarily broken. Tear down what we started
+        # so we don't leak the listener's mDNS registration + bound port,
+        # then raise ConfigEntryNotReady so HA retries on its standard
+        # backoff schedule. Users with permanently broken multicast can
+        # configure static IPs via the options flow.
+        await _safe_stop_listener(listener)
+        for client in bundle.get("clients", []):
+            try: await client.__aexit__(None, None, None)
+            except Exception: pass
+        raise ConfigEntryNotReady(
+            "no Miele devices reachable on the LAN yet — will retry. "
+            "Configure static IPs in the integration's options if your "
+            "network blocks mDNS/multicast."
+        )
 
     if entry.data.get(CONF_REFRESH_TOKEN):
         bundle["token_refresh_task"] = entry.async_create_background_task(
@@ -200,6 +264,19 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = bundle
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+async def _safe_stop_listener(listener: MielePushListener) -> None:
+    """Best-effort listener cleanup used by every failure path in _setup_cloud.
+
+    A half-started listener still holds an mDNS registration + a bound port —
+    if we leave it alive across a failed setup, HA's retry will collide with
+    those and trip NotRunningException / OSError (issue #2).
+    """
+    try:
+        await listener.stop()
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("listener stop on abort failed (ignored): %s", err)
 
 
 async def _token_refresh_loop(hass: HomeAssistant, entry: ConfigEntry) -> None:

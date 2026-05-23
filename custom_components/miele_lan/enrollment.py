@@ -230,6 +230,84 @@ async def enroll_device(
     )
 
 
+async def cleanup_stale_subscriptions(
+    *,
+    host_ip: str,
+    fab: str,
+    group_id_hex: str,
+    group_key_hex: str,
+    our_ha_fab: str,
+) -> int:
+    """Walk an appliance's `/Subscriptions/` and delete orphan HA-listener slots.
+
+    A slot is "stale" when:
+      - Callback is an `http://Miele-…local.:18082/Devices/000999XXXXXX/…` URL, and
+      - the fab in that URL is a HA-listener fab (starts with `000999`) that is
+        NOT our own (`our_ha_fab`).
+
+    Always preserves:
+      - `Callback="Cloud"` (firmware-installed cloud-tier subscription)
+      - peer appliance callbacks (Miele-…:80 / non-`000999` fabs)
+      - OUR own callbacks (so reload doesn't break our push)
+
+    Returns the number of slots deleted. Best-effort; failures are logged
+    but don't abort.
+    """
+    deleted = 0
+    try:
+        client = MieleLanClient.from_hex(host_ip, group_id_hex, group_key_hex, fab,
+                                          timeout=6.0)
+        async with client as c:
+            # Slot IDs are monotonic, never reused, so we scan a wide range
+            # (live observation: typical max ≤ 32). Stop once we've seen many
+            # consecutive 404s to bound the scan.
+            misses = 0
+            for n in range(1, 64):
+                try:
+                    st, body = await c.raw._request_bytes(
+                        "GET", f"/Subscriptions/{n}/",
+                        allowed_status=(200, 404),
+                    )
+                except Exception:
+                    misses += 1
+                    if misses >= 16:
+                        break
+                    continue
+                if st != 200:
+                    misses += 1
+                    if misses >= 16:
+                        break
+                    continue
+                misses = 0
+                txt = body.decode("utf-8", errors="replace")
+                # HA-listener-fab regex: contains "Devices/000999XXXXXX/" but
+                # not Devices/{our_ha_fab}/
+                import re
+                ha_fabs = set(re.findall(r"Devices/(000999\d{6})/", txt))
+                stale = any(f != our_ha_fab for f in ha_fabs)
+                if not stale:
+                    continue
+                try:
+                    await c.raw._request_bytes(
+                        "DELETE", f"/Subscriptions/{n}/",
+                        allowed_status=(200, 204, 404),
+                    )
+                    deleted += 1
+                    _LOGGER.info(
+                        "[%s] deleted stale subscription slot %d (HA fab %s)",
+                        fab, n, ",".join(ha_fabs),
+                    )
+                except Exception as err:
+                    _LOGGER.debug(
+                        "[%s] couldn't delete stale slot %d: %s", fab, n, err,
+                    )
+    except Exception as err:
+        _LOGGER.warning(
+            "[%s @ %s] stale-subscription cleanup failed: %s", fab, host_ip, err,
+        )
+    return deleted
+
+
 async def enroll_all(
     devices: list[dict[str, str]],
     *,
@@ -283,10 +361,16 @@ class DeviceIpResolver:
         *,
         static: dict[str, str] | None = None,
         mdns_timeout: float = 4.0,
+        zeroconf: Any | None = None,
     ) -> None:
         self._static = static or {}
         self._cache: dict[str, str] = {}
         self._mdns_timeout = mdns_timeout
+        # When given, mDNS lookups reuse HA's shared AsyncZeroconf instance
+        # instead of spinning up a competing one — avoids the HA frame-helper
+        # warning and prevents the two from contesting the same UDP socket on
+        # restart-heavy paths (issue #2).
+        self._zc: Any | None = zeroconf
 
     def remember(self, fab: str, ip: str) -> None:
         self._cache[fab] = ip
@@ -321,11 +405,10 @@ class DeviceIpResolver:
 
         target_hostname = synthetic_mac_hostname(fab)
         found_ip: str | None = None
-        zc = AsyncZeroconf(ip_version=IPVersion.V4Only)
+        owns_zc = self._zc is None
+        zc = self._zc if self._zc is not None else AsyncZeroconf(ip_version=IPVersion.V4Only)
 
         try:
-            services: list[tuple[str, str, int]] = []
-
             def _on_service(zeroconf, service_type, name, state_change) -> None:  # type: ignore[no-untyped-def]
                 pass  # we'll resolve by direct lookup below
 
@@ -341,7 +424,8 @@ class DeviceIpResolver:
                     found_ip = ".".join(str(b) for b in addr)
                     break
         finally:
-            await zc.async_close()
+            if owns_zc:
+                await zc.async_close()
 
         return found_ip
 
