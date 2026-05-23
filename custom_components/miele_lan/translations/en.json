@@ -20,7 +20,7 @@
       },
       "cloud_authorize": {
         "title": "Miele@LAN — authorise",
-        "description": "**Open this URL in Chrome / Edge on a desktop computer** with the DevTools open (F12 → Network tab, enable *Preserve log*):\n\n[Open the authorization URL]({authorize_url})\n\nLog in with your Miele account. The browser will refuse to navigate the final `miele://oauth2-code/?code=…&state=…` redirect — that's expected. In DevTools → Network, find the **last request whose URL starts with `miele://`** (usually highlighted red), right-click it → *Copy → Copy link address*. **Paste that full `miele://oauth2-code/...` URL below.**",
+        "description": "**Open this URL in Chrome / Edge on a desktop computer** with the DevTools open (F12 → Network tab, enable *Preserve log*):\n\n[Open the authorization URL]({authorize_url})\n\nLog in with your Miele account. The browser will refuse to navigate the final `miele://oauth2-code/?code=…&state=…` redirect — that's expected. In DevTools → Network, find the **last request whose URL** starts with `miele://` (usually highlighted red), right-click it → *Copy → Copy link address*. **Paste that full `miele://oauth2-code/...` URL below.**",
         "data": {
           "redirect_url": "Pasted miele://oauth2-code/?code=… URL"
         }

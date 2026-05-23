@@ -20,7 +20,7 @@
       },
       "cloud_authorize": {
         "title": "Miele@LAN — Anmeldung",
-        "description": "**Diese URL in Chrome / Edge auf einem Desktop-Computer öffnen** mit geöffneten DevTools (F12 → Tab *Netzwerk*, *Log beibehalten* aktivieren):\n\n[Anmelde-URL öffnen]({authorize_url})\n\nMit dem Miele-Konto anmelden. Der Browser bricht die letzte Weiterleitung auf `miele://oauth2-code/?code=…&state=…` ab — das ist gewollt. In den DevTools → *Netzwerk* den **letzten Eintrag mit URL `miele://`** suchen (meist rot markiert), Rechtsklick → *Kopieren → Verknüpfungsadresse kopieren*. **Diese komplette `miele://oauth2-code/...`-URL hier einfügen.**",
+        "description": "**Diese URL in Chrome / Edge auf einem Desktop-Computer öffnen** mit geöffneten DevTools (F12 → Tab *Netzwerk*, *Log beibehalten* aktivieren):\n\n[Anmelde-URL öffnen]({authorize_url})\n\nMit dem Miele-Konto anmelden. Der Browser bricht die letzte Weiterleitung auf `miele://oauth2-code/?code=…&state=…` ab — das ist gewollt. In den DevTools → *Netzwerk* den **letzten Eintrag** mit URL `miele://` suchen (meist rot markiert), Rechtsklick → *Kopieren → Verknüpfungsadresse kopieren*. **Diese komplette `miele://oauth2-code/...`-URL hier einfügen.**",
         "data": {
           "redirect_url": "Eingefügte miele://oauth2-code/?code=… URL"
         }
