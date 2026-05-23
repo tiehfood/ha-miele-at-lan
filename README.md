@@ -73,14 +73,14 @@ For factory-fresh appliances, run `python tools/miele_lan_provision.py` on your 
 
 The cloud-pair flow opens a Miele login page that ends with a `miele://oauth2-code/?code=…&state=…` redirect. Browsers refuse to navigate the `miele://` scheme, so the URL never appears in the address bar — you have to grab it from the network log:
 
-1. Open the authorization URL from the HA config-flow step in **Chrome / Edge / Brave on a desktop computer**.
+1. Open the authorization URL from the HA config-flow step in **Chrome / Edge on a desktop computer**.
 2. Open **DevTools → Network** tab (F12) **before** logging in, and enable *Preserve log* so the redirect isn't cleared.
 3. Log in with your Miele account.
 4. The browser will refuse the final navigation — that's expected. In the Network tab, find the **last request whose URL starts with `miele://`** (usually highlighted red as "blocked").
 5. Right-click that row → *Copy → Copy link address*.
 6. Paste the full `miele://oauth2-code/?code=…&state=…` URL into the config-flow input.
 
-Same flow works in Firefox (DevTools → Network → look for the blocked `miele://` redirect) and Safari (Web Inspector → Network).
+Same flow works in Firefox (DevTools → Network → look for the blocked `miele://` redirect).
 
 ## Limitations
 
