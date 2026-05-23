@@ -171,6 +171,62 @@ async def cmd_wifi(args: argparse.Namespace) -> int:
     return 1
 
 
+async def _fetch_cloud_tan(tokens_path: Path) -> str:
+    """Get a fresh cloud-issued pairing TAN using the user's stored OAuth tokens.
+
+    Reads `~/.miele_oauth_tokens.json` (or another path), refreshes the access
+    token (refresh tokens rotate — we rewrite the file on rotation), then GETs
+    /V2/TAN/ from rest-eu.domestic.miele-iot.com.
+    """
+    sys.path.insert(0, str(ROOT))
+    from custom_components.miele_lan.cloud import (  # noqa: E402
+        refresh_access_token, fetch_pairing_tan,
+    )
+    if not tokens_path.exists():
+        raise SystemExit(
+            f"OAuth tokens file not found: {tokens_path}\n"
+            f"Run `tools/miele_oauth_exchange.py` first to authorize."
+        )
+    tokens = json.loads(tokens_path.read_text())
+    cc = tokens.get("cc") or tokens.get("country") or "de"
+    refresh_token = tokens.get("refresh_token")
+    if not refresh_token:
+        raise SystemExit(f"{tokens_path} has no refresh_token — re-authorize.")
+    async with aiohttp.ClientSession() as session:
+        new_tokens = await refresh_access_token(session, cc, refresh_token)
+        access_token = new_tokens["access_token"]
+        # Rotate stored refresh token if Gigya/MAP returned a new one.
+        rotated = new_tokens.get("refresh_token")
+        if rotated and rotated != refresh_token:
+            merged = {**tokens, **new_tokens}
+            tokens_path.write_text(json.dumps(merged, indent=2))
+            try: tokens_path.chmod(0o600)
+            except Exception: pass
+            print(f"  (refresh_token rotated; saved → {tokens_path})")
+        return await fetch_pairing_tan(session, access_token, region="EU")
+
+
+async def _send_tan_to_appliance(
+    session: aiohttp.ClientSession, device_ip: str, tan: str,
+) -> bool:
+    """POST /Security/Cloud/TAN/ {"Tan": "<value>"} — no auth header.
+
+    Per APK decompile (MieleJsonUtf8.cs:11639 SendTanToApplianceAsync):
+    plain `application/json`, host scoped, isSoftApCommunication=false.
+    """
+    body = json.dumps({"Tan": tan}).encode("utf-8")
+    headers = {
+        "Content-Type": CT_JSON, "Accept": CT_JSON, "User-Agent": USER_AGENT,
+    }
+    url = f"http://{device_ip}/Security/Cloud/TAN/"
+    async with session.post(url, data=body, headers=headers) as r:
+        b = await r.read()
+        print(f"  POST {url}  →  HTTP {r.status}  body_len={len(b)}")
+        if b and len(b) < 300:
+            print(f"     body: {b.decode('utf-8', 'replace').strip()[:280]}")
+        return 200 <= r.status < 300
+
+
 async def cmd_commission(args: argparse.Namespace) -> int:
     """Push generated GroupID/GroupKey to the appliance (factory state, post-WiFi).
 
@@ -197,6 +253,29 @@ async def cmd_commission(args: argparse.Namespace) -> int:
         print("--enable-only set: skipping unauthenticated PUT, going straight to signed EnableApplianceGroupMode\n")
         status = 200
     else:
+        # EK039W (hob/laundry) firmware enforces the cloud-TAN gate that
+        # EK057S firmware 09.14 skipped. The TAN is a one-shot cloud-issued
+        # nonce; the cloud signals the appliance over its own wss channel
+        # that this TAN is expected, then we POST it on LAN.
+        if args.use_cloud_tan:
+            print("--use-cloud-tan: fetching cloud TAN, then POSTing to appliance\n")
+            try:
+                tan = await _fetch_cloud_tan(Path(args.tokens_file).expanduser())
+            except Exception as err:
+                print(f"✗ cloud TAN fetch failed: {err}")
+                return 1
+            print(f"  got TAN {tan!r} from /V2/TAN/")
+            timeout = aiohttp.ClientTimeout(total=12)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                ok = await _send_tan_to_appliance(session, args.device, tan)
+            if not ok:
+                print("✗ POST /Security/Cloud/TAN/ failed — appliance refused the TAN.")
+                print("  Possible causes: appliance not online to its cloud channel,")
+                print("  TAN already consumed by another commissioning attempt, or the")
+                print("  bearer scope does not cover this device.")
+                return 1
+            print("✓ Appliance accepted TAN. Commissioning gate should now be open.\n")
+
         print(f"PUT /Security/Commissioning/  body_len={len(payload)}  (with MielePairing:Pairing header)\n")
         timeout = aiohttp.ClientTimeout(total=12)
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -260,6 +339,109 @@ async def cmd_commission(args: argparse.Namespace) -> int:
     blob = base64.b64encode(json.dumps(blob_payload, separators=(",", ":")).encode()).decode()
     print(f"\nHA setup blob (paste into the config flow's 'setup blob' field):")
     print(f"  {blob}")
+    return 0
+
+
+async def cmd_pair(args: argparse.Namespace) -> int:
+    """SoftAP single-shot: commission first, push WiFi second.
+
+    Inverts the order vs. the official Miele app (which does WiFi then
+    commission on the home-LAN IP). Doing commissioning while still on the
+    SoftAP closes the race with Miele's cloud — when the device joins home
+    WiFi it's already locally-keyed, and the cloud accepts it as-is rather
+    than installing its own GroupKey. This is what keeps `/Security/...`
+    and `/DOP2/...` reachable at HAN tier post-cloud-pair.
+
+    Pre-req: laptop is joined to the appliance's SoftAP and reachable at
+    --device (default 192.168.1.1).
+    """
+    if args.group_id and args.group_key:
+        group_id, group_key = args.group_id.upper(), args.group_key.upper()
+        if len(group_id) != 16 or len(group_key) != 128:
+            print("✗ --group-id must be 16 hex chars and --group-key 128 hex chars")
+            return 1
+        print("Using supplied keys (KEEP SECRET):")
+    else:
+        group_id, group_key = generate_keys()
+        print("Generated keys (KEEP SECRET):")
+    print(f"  GroupID  = {redact(group_id)} (full value will be saved to {args.out})")
+    print(f"  GroupKey = {redact(group_key)}\n")
+
+    commission_body = json.dumps({"GroupKey": group_key, "GroupID": group_id}).encode("utf-8")
+    wifi_body = json.dumps({"SSID": args.ssid, "Sec": args.sec, "Key": args.psk}).encode("utf-8")
+
+    timeout = aiohttp.ClientTimeout(total=12)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        # Step A — detect fab via unauthenticated GET /Devices on the SoftAP.
+        # SoftAP exposes only this device's own fab, with Pairing=false.
+        route: str | None = None
+        try:
+            ssl_ctx = ssl.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+            async with session.get(
+                f"https://{args.device}/Devices", ssl=ssl_ctx,
+                headers={"Accept": CT_ACCEPT_MIELE, "User-Agent": USER_AGENT},
+            ) as resp:
+                if resp.status == 200:
+                    j = json.loads((await resp.read()).decode("utf-8", errors="replace"))
+                    keys = [k for k in j if k.isdigit()]
+                    if len(keys) == 1:
+                        route = keys[0]
+                        print(f"✓ Detected fab/route from SoftAP: {route}\n")
+        except Exception as err:
+            print(f"  (route detection on SoftAP skipped: {err})\n")
+
+        # Step B — commission on SoftAP IP (THE order change).
+        print("PUT /Security/Commissioning/ on SoftAP  (with MielePairing:Pairing)")
+        status, _ = await _put_unauthenticated(
+            session, args.device, "/Security/Commissioning/", commission_body,
+            content_type=CT_JSON, accept=CT_JSON, pairing_auth=True,
+            try_https_first=True,
+        )
+        if not (200 <= status < 300):
+            print(f"\n✗ SoftAP commissioning FAILED with HTTP {status}.")
+            print("  Device may not be in factory state. Factory-reset and retry.")
+            return 1
+        print("\n✓ Commissioning accepted on SoftAP — device is now locally keyed.\n")
+
+        # Step C — push WiFi creds on SoftAP IP. Device drops AP after this.
+        print(f"PUT /WLAN/ on SoftAP  (SSID={args.ssid!r})")
+        status, _ = await _put_unauthenticated(
+            session, args.device, "/WLAN/", wifi_body,
+            try_https_first=True,
+            content_type=CT_MIELE, accept=CT_ACCEPT_MIELE,
+        )
+        if not (200 <= status < 300):
+            print(f"\n✗ WiFi push FAILED with HTTP {status}.")
+            print("  Keys ARE installed though — re-run with `wifi` from the SoftAP.")
+            return 1
+        print("\n✓ WiFi credentials accepted. Device will drop SoftAP and join home WiFi.")
+
+    out = ROOT / args.out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    block: dict[str, Any] = {
+        "endpoints": {
+            args.endpoint: {
+                "host": "",  # filled in after device joins home WiFi (mDNS / arp)
+                "groupId": group_id,
+                "groupKey": group_key,
+                **({"route": route} if route else {}),
+            }
+        }
+    }
+    if out.exists() and out.stat().st_size:
+        existing = yaml.safe_load(out.read_text()) or {}
+        existing.setdefault("endpoints", {}).update(block["endpoints"])
+        block = existing
+    out.write_text(yaml.safe_dump(block, sort_keys=False))
+    print(f"\n✓ Wrote {out.relative_to(ROOT)}")
+    print("\nNext steps:")
+    print("  1. Rejoin your home WiFi from this laptop.")
+    print("  2. Wait ~30s for the appliance to come up; find its LAN IP")
+    print("     (router lease table, `dns-sd -B _mieleathome._tcp local.`, or arp scan).")
+    print(f"  3. Fill in `host:` for endpoint `{args.endpoint}` in {args.out}.")
+    print(f"  4. `verify --endpoint {args.endpoint}` to confirm MieleH256 signed reads work.")
     return 0
 
 
@@ -429,6 +611,15 @@ def build_parser() -> argparse.ArgumentParser:
     pc.add_argument("--group-key", help="Use this GroupKey (128 hex chars) instead of generating one")
     pc.add_argument("--enable-only", action="store_true",
                     help="Skip the unauthenticated PUT and run only the signed EnableApplianceGroupMode step (use when device is already commissioned but stuck on 'Warten auf App')")
+    pc.add_argument("--use-cloud-tan", action="store_true",
+                    help="Before the commissioning PUT, fetch a cloud TAN via "
+                         "OAuth and POST it to /Security/Cloud/TAN/. Required "
+                         "for EK039W-class WiFi modules (KM7576 hob, fridges, "
+                         "laundry) where the firmware enforces the TAN gate "
+                         "that EK057S firmware 09.14 skipped.")
+    pc.add_argument("--tokens-file", default="~/.miele_oauth_tokens.json",
+                    help="Path to OAuth tokens file written by "
+                         "tools/miele_oauth_exchange.py (default %(default)s)")
     pc.add_argument(
         "--register-subscription", metavar="URL",
         help="After commissioning succeeds, POST /Subscriptions with this Callback URL "
@@ -437,6 +628,23 @@ def build_parser() -> argparse.ArgumentParser:
              "may return 403 if the window has already closed.",
     )
     pc.set_defaults(func=cmd_commission)
+
+    pp = sub.add_parser(
+        "pair",
+        help="SoftAP single-shot: commission first, then push home WiFi. "
+             "Closes the race against Miele cloud and keeps DOP2/HAN-tier writes open.",
+    )
+    pp.add_argument("--device", default=DEFAULT_DEVICE_IP_SOFTAP,
+                    help="Appliance IP on the SoftAP (default %(default)s)")
+    pp.add_argument("--ssid", required=True, help="Home WiFi SSID to push")
+    pp.add_argument("--psk", required=True, help="Home WiFi PSK to push")
+    pp.add_argument("--sec", default="WPA2", choices=("WPA", "WPA2", "WPA3", "None"))
+    pp.add_argument("--out", default=".claude/research/keys.yaml")
+    pp.add_argument("--endpoint", default="oven",
+                    help="Endpoint name in keys.yaml (e.g. hob, dryer, fridge)")
+    pp.add_argument("--group-id", help="Use this GroupID (16 hex chars) instead of generating one")
+    pp.add_argument("--group-key", help="Use this GroupKey (128 hex chars) instead of generating one")
+    pp.set_defaults(func=cmd_pair)
 
     pv = sub.add_parser("verify", help="Verify stored keys against a live device.")
     pv.add_argument("--device", help="(unused — kept for symmetry)")
