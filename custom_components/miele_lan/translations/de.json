@@ -27,7 +27,7 @@
       },
       "cloud_tokens": {
         "title": "Miele@LAN — Tokens einfügen",
-        "description": "Diesen Weg nutzen, wenn der OAuth-Flow extern durchgeführt wurde (z. B. via `tools/miele_oauth_*.py` Skripte) und `access_token` + `refresh_token` bereits vorliegen.\n\nWerte aus `~/.miele_oauth_tokens.json` einfügen.",
+        "description": "Diesen Weg nutzen, wenn `access_token` + `refresh_token` bereits aus einem Miele-OAuth-Flow gegen `prod.map.miele-iot.com` vorliegen (z. B. während des Cloud-Pair-Schritts in einer anderen HA-Instanz erfasst).\n\nBeide Tokens einfügen — HA nutzt den `access_token` einmalig zum Abruf des Household-`GroupKey` von `rest-eu.domestic.miele-iot.com/V2/GroupKeyId/` und speichert den `refresh_token` für spätere Erneuerungen.",
         "data": {
           "country": "Land",
           "refresh_token": "Refresh-Token",

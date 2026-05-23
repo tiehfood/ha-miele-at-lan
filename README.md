@@ -64,7 +64,7 @@ Copy `custom_components/miele_lan/` into your HA config (final path: `<config>/c
 **Settings → Devices & services → Add Integration → Miele@LAN.** Three setup paths:
 
 - **Cloud pairing (recommended).** Log in once with your Miele account; HA fetches the household `GroupKey` from `rest-eu.domestic.miele-iot.com`, mDNS-discovers every appliance, and provisions a SuperVision push listener. The Miele app continues to work in parallel.
-- **Paste pre-obtained tokens.** Skip the in-flow OAuth if you've already exchanged a `refresh_token` via the bundled `tools/miele_oauth_*.py` scripts.
+- **Paste pre-obtained tokens.** Skip the in-flow OAuth if you already have an `access_token` + `refresh_token` from a Miele OAuth flow against `prod.map.miele-iot.com` (e.g. captured during the Cloud-pairing step in another HA instance).
 - **Paste household credentials.** If you've already extracted `GroupID` + `GroupKey` (e.g. from `MieleRESTServer`), paste them directly — no cloud round-trip needed.
 
 For factory-fresh appliances, run `python tools/miele_lan_provision.py` on your laptop first to commission them — this writes a new `GroupID`/`GroupKey` and binds the appliance to your LAN.

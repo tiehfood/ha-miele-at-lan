@@ -184,7 +184,7 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Power-user path: paste access_token + refresh_token already obtained
-        via the bundled `tools/miele_oauth_*.py` scripts. We skip code-exchange
+        from a Miele OAuth flow against `prod.map.miele-iot.com`. We skip code-exchange
         entirely and go straight to fetch_groupkey()."""
         errors: dict[str, str] = {}
         if user_input is not None:

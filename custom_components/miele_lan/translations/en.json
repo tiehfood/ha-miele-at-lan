@@ -27,7 +27,7 @@
       },
       "cloud_tokens": {
         "title": "Miele@LAN — paste tokens",
-        "description": "Use this path if you already did the OAuth flow externally (e.g. via the bundled `tools/miele_oauth_*.py` scripts) and have an `access_token` + `refresh_token` ready.\n\nPaste the values from `~/.miele_oauth_tokens.json` here.",
+        "description": "Use this path if you already obtained an `access_token` + `refresh_token` from a Miele OAuth flow against `prod.map.miele-iot.com` (for example captured during the standard cloud-pair step in another HA instance).\n\nPaste both tokens — HA uses the `access_token` once to fetch your household `GroupKey` from `rest-eu.domestic.miele-iot.com/V2/GroupKeyId/`, and stores the `refresh_token` for later renewals.",
         "data": {
           "country": "Country",
           "refresh_token": "Refresh token",
