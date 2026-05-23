@@ -246,6 +246,48 @@ async def fetch_groupkey(
     )
 
 
+async def fetch_pairing_tan(
+    session: aiohttp.ClientSession,
+    access_token: str,
+    region: str = "EU",
+) -> str:
+    """GET /V2/TAN/ → cloud-issued one-shot TAN for the next commissioning.
+
+    Used by `tools/miele_lan_provision.py --use-cloud-tan` to satisfy the
+    EK039W (and similar) firmware's TAN check before PUT /Security/Commissioning/
+    will accept our keys. The cloud out-of-band notifies the appliance over its
+    `wss://websocket-eu.mcs2.miele.com` channel that this TAN is expected, then
+    the caller POSTs it to the appliance's `/Security/Cloud/TAN/`.
+
+    Returns the bare TAN string from the `Tan` field. Raises on non-200.
+    """
+    host = REST_HOST_BY_REGION.get(region.upper())
+    if not host:
+        raise ValueError(f"unknown region {region!r}")
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+        "Accept-Language": "de-DE",
+        "User-Agent": "Miele@LAN/0.3 (Home Assistant)",
+    }
+    async with session.get(
+        f"https://{host}/V2/TAN/",
+        headers=headers,
+        timeout=aiohttp.ClientTimeout(total=15),
+    ) as r:
+        if r.status != 200:
+            raise RuntimeError(
+                f"/V2/TAN/ returned {r.status}: {(await r.text())[:200]!r}"
+            )
+        data = await r.json(content_type=None)
+    # The cloud responds with lowercase `tan` (live), even though the decompiled
+    # C# DTO is `TanDto.Tan`. Accept either spelling to stay robust.
+    tan = (data or {}).get("tan") or (data or {}).get("Tan")
+    if not tan:
+        raise RuntimeError(f"/V2/TAN/ response missing tan field: {data!r}")
+    return str(tan)
+
+
 __all__ = [
     "CONSUMER_CLIENT_IDS",
     "REDIRECT_URI",
@@ -258,4 +300,5 @@ __all__ = [
     "exchange_code",
     "refresh_access_token",
     "fetch_groupkey",
+    "fetch_pairing_tan",
 ]
