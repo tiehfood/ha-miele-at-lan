@@ -2002,6 +2002,27 @@
           "slightly_dry": "Slightly dry",
           "smoothing": "Smoothing"
         }
+      },
+      "cooktop_timer_minutes": {
+        "name": "Cooktop timer remaining"
+      },
+      "plate_1_duration_minutes": {
+        "name": "Cooking zone 1 duration"
+      },
+      "plate_2_duration_minutes": {
+        "name": "Cooking zone 2 duration"
+      },
+      "plate_3_duration_minutes": {
+        "name": "Cooking zone 3 duration"
+      },
+      "plate_4_duration_minutes": {
+        "name": "Cooking zone 4 duration"
+      },
+      "plate_5_duration_minutes": {
+        "name": "Cooking zone 5 duration"
+      },
+      "plate_6_duration_minutes": {
+        "name": "Cooking zone 6 duration"
       }
     },
     "binary_sensor": {
@@ -2034,6 +2055,42 @@
       },
       "super_freeze": {
         "name": "SuperFreeze"
+      },
+      "plate_1_pot_detected": {
+        "name": "Cooking zone 1 pot detected"
+      },
+      "plate_1_ankochautomatik": {
+        "name": "Cooking zone 1 auto pre-boil"
+      },
+      "plate_2_pot_detected": {
+        "name": "Cooking zone 2 pot detected"
+      },
+      "plate_2_ankochautomatik": {
+        "name": "Cooking zone 2 auto pre-boil"
+      },
+      "plate_3_pot_detected": {
+        "name": "Cooking zone 3 pot detected"
+      },
+      "plate_3_ankochautomatik": {
+        "name": "Cooking zone 3 auto pre-boil"
+      },
+      "plate_4_pot_detected": {
+        "name": "Cooking zone 4 pot detected"
+      },
+      "plate_4_ankochautomatik": {
+        "name": "Cooking zone 4 auto pre-boil"
+      },
+      "plate_5_pot_detected": {
+        "name": "Cooking zone 5 pot detected"
+      },
+      "plate_5_ankochautomatik": {
+        "name": "Cooking zone 5 auto pre-boil"
+      },
+      "plate_6_pot_detected": {
+        "name": "Cooking zone 6 pot detected"
+      },
+      "plate_6_ankochautomatik": {
+        "name": "Cooking zone 6 auto pre-boil"
       }
     },
     "switch": {

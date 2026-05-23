@@ -24,6 +24,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import enums
+from .extended_state import parse_hob_extended_state
 from .const import (
     COOLING_FAMILY,
     CYCLE_FAMILY,
@@ -149,52 +150,21 @@ def _gated(getter: Callable[[dict[str, Any]], Any]) -> Callable[[dict[str, Any]]
     return fn
 
 
-def _hob_booster(state: dict[str, Any], zone: int) -> int:
-    """Return per-zone booster level from ExtendedState.
-
-    Layout RE'd from `Miele.Modules.Hobs.ApplianceCommunication.ApplianceData.Dop1.dll`
-    `MACI_DS_HobExtendedData` (DOP2 object id 4711). Verified live on KM7576
-    with Boost I on zone 3 → ExtendedState[15] == 0x48, bits 6-7 == 0b01.
-
-    `ExtendedState` is a hex-encoded 62-byte blob. Per-zone byte layout:
-        PowerLevelZone<n>  at offset  8 + 3*(n-1)
-        InfoZone<n>        at offset  9 + 3*(n-1)
-        ErrorHintZone<n>   at offset 10 + 3*(n-1)
-
-    Inside InfoZone<n>, bits 6-7 = Boosterfunktion (LSB-numbered):
-        0 = off, 1 = Boost I, 2 = Boost II, 3 = Boost III
-
-    Returns 0 when ExtendedState is missing, too short, or booster bits are 0.
-    """
-    ext = state.get("ExtendedState")
-    if not isinstance(ext, str):
-        return 0
-    try:
-        b = bytes.fromhex(ext)
-    except ValueError:
-        return 0
-    off = 9 + 3 * zone  # zone is 0-indexed; InfoZone<zone+1> lives here
-    if off >= len(b):
-        return 0
-    return (b[off] >> 6) & 0x3
-
-
 def _hob_plate_step(state: dict[str, Any], zone: int) -> str | None:
     """Resolve a hob zone's display value, preferring Booster over Level.
 
     Mirrors the APK's `MapPowerlevelToLevel`: if `Booster` is non-zero, the
-    UI labels it `Boost I` / `Boost II` / `Boost III` (Miele translation
-    keys `APP__KM_BOOSTER_{I,II,III}__INFO`); otherwise the base PlateStep
-    is shown via `HobPlateStep`. On newer K-modules (KM7576 / EK039W) the
-    booster lives in `ExtendedState` and *not* in `PlateStep`, so this dual
-    lookup is the only way to surface boost over LAN.
+    UI labels it `Boost I` / `Boost II` / `Boost III`; otherwise the base
+    `PlateStep` is shown via `HobPlateStep`. On newer K-modules (KM7576 /
+    EK039W) the booster lives in `ExtendedState` and *not* in `PlateStep`,
+    so this dual lookup is the only way to surface boost over LAN.
     """
     plate = state.get("PlateStep") or []
     if zone >= len(plate):
         return None
-    booster = _hob_booster(state, zone)
-    if booster:
-        return f"boost_{booster}"  # boost_1 / boost_2 / boost_3
+    ext = parse_hob_extended_state(state.get("ExtendedState"))
+    if ext and zone < len(ext.zones) and ext.zones[zone].booster:
+        return f"boost_{ext.zones[zone].booster}"
     return enums.HobPlateStep.get(plate[zone])
 
 
@@ -561,6 +531,42 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             ),
         )
         for n in range(1, 7)
+    ),
+    # Hob: per-zone programmed cook duration, decoded from ExtendedState
+    # (DurationZone<N> u16 at offset 28+4*(N-1)). Disabled by default — only
+    # meaningful when the user pre-programmed a timer on that zone.
+    *(
+        MieleLanSensorDef(
+            types=HOB_FAMILY,
+            description=MieleLanSensorDescription(
+                key=f"plate_{n}_duration_minutes",
+                translation_key=f"plate_{n}_duration_minutes",
+                device_class=SensorDeviceClass.DURATION,
+                native_unit_of_measurement=UnitOfTime.MINUTES,
+                entity_category=EntityCategory.DIAGNOSTIC,
+                entity_registry_enabled_default=False,
+                value_fn=lambda s, _i=n - 1: (
+                    (e := parse_hob_extended_state(s.get("ExtendedState")))
+                    and _i < len(e.zones)
+                    and e.zones[_i].duration_minutes or None
+                ),
+            ),
+        )
+        for n in range(1, 7)
+    ),
+    # Hob cooktop-wide cook timer (`TimerHours`+`TimerMinutes` in ExtendedState).
+    MieleLanSensorDef(
+        types=HOB_FAMILY,
+        description=MieleLanSensorDescription(
+            key="cooktop_timer_minutes",
+            translation_key="cooktop_timer_minutes",
+            device_class=SensorDeviceClass.DURATION,
+            native_unit_of_measurement=UnitOfTime.MINUTES,
+            value_fn=lambda s: (
+                (e := parse_hob_extended_state(s.get("ExtendedState")))
+                and e.cooktop_timer_minutes or None
+            ),
+        ),
     ),
     # Light *value* (the boolean "is it on?" question is handled by the light
     # entity itself; this sensor just surfaces the raw enum for diagnostics).

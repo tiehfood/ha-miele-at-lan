@@ -11,6 +11,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -19,11 +20,13 @@ from .const import (
     CYCLE_FAMILY,
     DOMAIN,
     DOORED_FAMILY,
+    HOB_FAMILY,
     WINE_FAMILY,
     MieleAppliance,
 )
 from .coordinator import MieleLanCoordinator
 from .entity import MieleLanEntity
+from .extended_state import parse_hob_extended_state
 
 ALL_TYPES: tuple[MieleAppliance, ...] = tuple(
     t for t in MieleAppliance if t is not MieleAppliance.UNKNOWN
@@ -114,6 +117,42 @@ BINARY_SENSOR_TYPES: tuple[MieleLanBinarySensorDef, ...] = (
             translation_key="super_freeze",
             is_on_fn=lambda s: s.get("Status") == 13,
         ),
+    ),
+    # Hob — per-zone "pot detected" decoded from ExtendedState (bit 3 of
+    # InfoZone<n>). Useful for "burner has a pan on it" automations.
+    *(
+        MieleLanBinarySensorDef(
+            types=HOB_FAMILY,
+            description=MieleLanBinarySensorDescription(
+                key=f"plate_{n}_pot_detected",
+                translation_key=f"plate_{n}_pot_detected",
+                is_on_fn=lambda s, _i=n - 1: (
+                    (e := parse_hob_extended_state(s.get("ExtendedState")))
+                    and _i < len(e.zones)
+                    and e.zones[_i].pot_detected
+                ),
+            ),
+        )
+        for n in range(1, 7)
+    ),
+    # Hob — per-zone "Ankochautomatik" (auto pre-boil / boost-to-target).
+    # Diagnostic, off by default; mostly informational for power users.
+    *(
+        MieleLanBinarySensorDef(
+            types=HOB_FAMILY,
+            description=MieleLanBinarySensorDescription(
+                key=f"plate_{n}_ankochautomatik",
+                translation_key=f"plate_{n}_ankochautomatik",
+                entity_category=EntityCategory.DIAGNOSTIC,
+                entity_registry_enabled_default=False,
+                is_on_fn=lambda s, _i=n - 1: (
+                    (e := parse_hob_extended_state(s.get("ExtendedState")))
+                    and _i < len(e.zones)
+                    and e.zones[_i].ankochautomatik
+                ),
+            ),
+        )
+        for n in range(1, 7)
     ),
     # Cooling-family: per-compartment door. RE'd from live KF 7772 B 2026-05-22:
     # `DoorStates[N]` is a 2-tuple `[state, ?]` where state code is

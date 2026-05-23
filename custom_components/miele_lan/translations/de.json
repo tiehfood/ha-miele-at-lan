@@ -2012,6 +2012,27 @@
           "slightly_dry": "Leicht trocken",
           "smoothing": "Glättung"
         }
+      },
+      "cooktop_timer_minutes": {
+        "name": "Kochfeld-Timer Restzeit"
+      },
+      "plate_1_duration_minutes": {
+        "name": "Kochzone 1 Programm-Dauer"
+      },
+      "plate_2_duration_minutes": {
+        "name": "Kochzone 2 Programm-Dauer"
+      },
+      "plate_3_duration_minutes": {
+        "name": "Kochzone 3 Programm-Dauer"
+      },
+      "plate_4_duration_minutes": {
+        "name": "Kochzone 4 Programm-Dauer"
+      },
+      "plate_5_duration_minutes": {
+        "name": "Kochzone 5 Programm-Dauer"
+      },
+      "plate_6_duration_minutes": {
+        "name": "Kochzone 6 Programm-Dauer"
       }
     },
     "binary_sensor": {
@@ -2044,6 +2065,42 @@
       },
       "super_freeze": {
         "name": "SuperFrost"
+      },
+      "plate_1_pot_detected": {
+        "name": "Kochzone 1 Topf erkannt"
+      },
+      "plate_1_ankochautomatik": {
+        "name": "Kochzone 1 Ankochautomatik"
+      },
+      "plate_2_pot_detected": {
+        "name": "Kochzone 2 Topf erkannt"
+      },
+      "plate_2_ankochautomatik": {
+        "name": "Kochzone 2 Ankochautomatik"
+      },
+      "plate_3_pot_detected": {
+        "name": "Kochzone 3 Topf erkannt"
+      },
+      "plate_3_ankochautomatik": {
+        "name": "Kochzone 3 Ankochautomatik"
+      },
+      "plate_4_pot_detected": {
+        "name": "Kochzone 4 Topf erkannt"
+      },
+      "plate_4_ankochautomatik": {
+        "name": "Kochzone 4 Ankochautomatik"
+      },
+      "plate_5_pot_detected": {
+        "name": "Kochzone 5 Topf erkannt"
+      },
+      "plate_5_ankochautomatik": {
+        "name": "Kochzone 5 Ankochautomatik"
+      },
+      "plate_6_pot_detected": {
+        "name": "Kochzone 6 Topf erkannt"
+      },
+      "plate_6_ankochautomatik": {
+        "name": "Kochzone 6 Ankochautomatik"
       }
     },
     "switch": {
