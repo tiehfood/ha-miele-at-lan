@@ -990,6 +990,9 @@
       "material_number": {
         "name": "Materialnummer"
       },
+      "hours_of_operation": {
+        "name": "Betriebsstunden"
+      },
       "push_mode": {
         "name": "Push-Status",
         "state": {

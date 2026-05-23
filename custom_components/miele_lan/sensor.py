@@ -630,6 +630,37 @@ class MieleLanWlanSensorDef:
     description: MieleLanWlanSensorDescription
 
 
+@dataclass(frozen=True, kw_only=True)
+class MieleLanDop2SensorDescription(SensorEntityDescription):
+    value_fn: Callable[[dict[str, Any]], Any]
+
+
+@dataclass(frozen=True, kw_only=True)
+class MieleLanDop2SensorDef:
+    types: tuple[MieleAppliance, ...]
+    description: MieleLanDop2SensorDescription
+
+
+# DOP2-derived diagnostics. Only exposed by appliances whose firmware leaves
+# the DOP2 surface reachable at the HAN tier (locally-commissioned ovens, in
+# practice). Entries map a translation key to a getter against the coordinator's
+# `dop2` dict, which is refreshed at DOP2_REFRESH_INTERVAL (see coordinator.py).
+DOP2_SENSORS: tuple[MieleLanDop2SensorDef, ...] = (
+    MieleLanDop2SensorDef(
+        types=OVEN_FAMILY,
+        description=MieleLanDop2SensorDescription(
+            key="hours_of_operation",
+            translation_key="hours_of_operation",
+            device_class=SensorDeviceClass.DURATION,
+            native_unit_of_measurement=UnitOfTime.HOURS,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            value_fn=lambda d: (d.get("hours_of_operation") or {}).get("total"),
+        ),
+    ),
+)
+
+
 # WLAN connection info — surfaced from the device's `/WLAN/` endpoint.
 WLAN_SENSORS: tuple[MieleLanWlanSensorDef, ...] = (
     MieleLanWlanSensorDef(
@@ -756,6 +787,9 @@ async def async_setup_entry(
         for d in WLAN_SENSORS:
             if dt in d.types:
                 entities.append(MieleLanWlanSensor(coord, d.description))
+        for d in DOP2_SENSORS:
+            if dt in d.types:
+                entities.append(MieleLanDop2Sensor(coord, d.description))
         # Diagnostic push-mode sensor — applies to every appliance.
         entities.append(MieleLanPushStateSensor(coord))
     async_add_entities(entities)
@@ -887,6 +921,27 @@ class MieleLanWlanSensor(MieleLanEntity, SensorEntity):
             return None
         try:
             return self.entity_description.value_fn(self.coordinator.data.wlan)
+        except Exception:  # noqa: BLE001
+            return None
+
+
+class MieleLanDop2Sensor(MieleLanEntity, SensorEntity):
+    entity_description: MieleLanDop2SensorDescription
+
+    def __init__(
+        self,
+        coordinator: MieleLanCoordinator,
+        description: MieleLanDop2SensorDescription,
+    ) -> None:
+        super().__init__(coordinator, description.key)
+        self.entity_description = description
+
+    @property
+    def native_value(self) -> Any:
+        if not self.coordinator.data:
+            return None
+        try:
+            return self.entity_description.value_fn(self.coordinator.data.dop2)
         except Exception:  # noqa: BLE001
             return None
 

@@ -21,7 +21,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MieleLanClient
-from .const import DOMAIN, MieleAppliance
+from .const import DOMAIN, OVEN_FAMILY, MieleAppliance
+from .dop2 import parse_hours_of_operation
 from .enrollment import EnrolledDevice
 from .push_listener import PushEvent
 
@@ -29,6 +30,8 @@ _LOGGER = logging.getLogger(__name__)
 
 POLL_FALLBACK_INTERVAL = 60  # seconds — slower than the active poll we used to do,
                              # because push handles the real-time work.
+DOP2_REFRESH_INTERVAL = 600  # seconds — hours-of-operation barely changes; we
+                             # only need to refresh ~once every 10 minutes.
 
 
 @dataclass
@@ -38,6 +41,7 @@ class MieleLanData:
     state: dict[str, Any] = field(default_factory=dict)
     ident: dict[str, Any] = field(default_factory=dict)
     wlan: dict[str, Any] = field(default_factory=dict)
+    dop2: dict[str, Any] = field(default_factory=dict)
 
 
 class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
@@ -68,6 +72,8 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         self.enrollment = enrollment
         self._data = MieleLanData()
         self._ident_loaded = False
+        self._dop2_last_fetch: float = 0.0
+        self._dop2_unsupported = False
         self._last_push_at: float | None = None
         self._push_count = 0
 
@@ -133,9 +139,47 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 self._data.ident = await self._fetch_full_ident()
                 self._data.wlan = await self._fetch_wlan()
                 self._ident_loaded = True
+            await self._maybe_refresh_dop2()
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(str(err)) from err
         return self._data
+
+    async def _maybe_refresh_dop2(self) -> None:
+        """Refresh DOP2-sourced diagnostics for device types that expose them.
+
+        Today: HoursOfOperation (leaf 2/119) for ovens. The leaf only updates
+        when a program runs, so we throttle to DOP2_REFRESH_INTERVAL — much
+        slower than the /State poll. Some appliances (and many cloud-only
+        commissionings) return 404 here; we latch off after the first miss to
+        avoid a steady noise of failures in the log.
+        """
+        if self._dop2_unsupported:
+            return
+        if self.device_type not in OVEN_FAMILY:
+            return
+        now = time.monotonic()
+        if now - self._dop2_last_fetch < DOP2_REFRESH_INTERVAL:
+            return
+        self._dop2_last_fetch = now
+        try:
+            st, body = await self.client.raw._request_bytes(
+                "GET", f"/Devices/{self.fab}/DOP2/2/119",
+                allowed_status=(200, 403, 404),
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("[%s] DOP2 2/119 fetch failed: %s", self.fab, err)
+            return
+        if st != 200:
+            self._dop2_unsupported = True
+            _LOGGER.debug(
+                "[%s] DOP2 2/119 returned %d — disabling DOP2 reads on this device",
+                self.fab, st,
+            )
+            return
+        try:
+            self._data.dop2["hours_of_operation"] = parse_hours_of_operation(body)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("[%s] DOP2 2/119 parse failed: %s", self.fab, err)
 
     async def _fetch_wlan(self) -> dict[str, Any]:
         """Read `/WLAN/` once at first refresh. The device exposes its current
