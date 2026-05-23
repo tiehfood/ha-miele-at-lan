@@ -69,6 +69,19 @@ Copy `custom_components/miele_lan/` into your HA config (final path: `<config>/c
 
 For factory-fresh appliances, run `python tools/miele_lan_provision.py` on your laptop first to commission them — this writes a new `GroupID`/`GroupKey` and binds the appliance to your LAN.
 
+### Capturing the OAuth redirect (Cloud pairing)
+
+The cloud-pair flow opens a Miele login page that ends with a `miele://oauth2-code/?code=…&state=…` redirect. Browsers refuse to navigate the `miele://` scheme, so the URL never appears in the address bar — you have to grab it from the network log:
+
+1. Open the authorization URL from the HA config-flow step in **Chrome / Edge / Brave on a desktop computer**.
+2. Open **DevTools → Network** tab (F12) **before** logging in, and enable *Preserve log* so the redirect isn't cleared.
+3. Log in with your Miele account.
+4. The browser will refuse the final navigation — that's expected. In the Network tab, find the **last request whose URL starts with `miele://`** (usually highlighted red as "blocked").
+5. Right-click that row → *Copy → Copy link address*.
+6. Paste the full `miele://oauth2-code/?code=…&state=…` URL into the config-flow input.
+
+Same flow works in Firefox (DevTools → Network → look for the blocked `miele://` redirect) and Safari (Web Inspector → Network).
+
 ## Limitations
 
 - **Fridges, freezers, and wine cabinets are read-only over LAN.** Miele's K7000/EasyControl firmware (XKM `EK057*`) does not expose any LAN write path for cooling appliances — verified end-to-end against a Miele KF 7772 B. Setpoint writes from the Miele app reach the appliance via the device-initiated TLS WebSocket to `rest-eu.domestic.miele-iot.com` and the LAN HTTP server uniformly returns HTTP 403 for every PUT/POST regardless of authentication. This is [confirmed by Miele's own documentation](https://www.miele.de/support/customer-assistance/app-1199/alle_kategorien/mobilecontrol_und_mobilestart-132299522827): on cooling appliances, MobileStart is permanently on and not togglable. HA still receives state changes in real time via SuperVision push, so the Miele app's setpoint changes show up immediately.

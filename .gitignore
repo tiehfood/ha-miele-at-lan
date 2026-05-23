@@ -4,7 +4,6 @@
 # only public-facing helper is the provisioning CLI referenced from README.
 tools/*
 !tools/miele_lan_provision.py
-docs/
 .idea/
 *.iml
 
@@ -40,7 +39,6 @@ config/
 home-assistant.log
 
 # --- Reverse-engineering scratch (do not commit) ---
-research/
 scratch/
 *.pcap
 *.pcapng
@@ -77,4 +75,6 @@ bin/
 ### Mac OS ###
 .DS_Store
 *.apk
+**.psd
+
 .miele_oauth_*.json

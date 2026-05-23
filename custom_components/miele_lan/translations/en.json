@@ -20,7 +20,7 @@
       },
       "cloud_authorize": {
         "title": "Miele@LAN — authorise",
-        "description": "**Open this URL** in a browser on a device that can handle the `miele://` URL scheme:\n\n* macOS with the MieleAuth.app installed (see the integration docs)\n* iPhone/iPad with the Miele iOS app installed\n* An Android phone with the Miele app installed\n\n[Open the authorization URL]({authorize_url})\n\nLog in with your Miele account. The browser will then redirect to `miele://oauth2-code/?code=…&state=…`. **Capture that full redirect URL and paste it below.** On macOS the MieleAuth.app writes it to `~/.miele_oauth_code.txt`.",
+        "description": "**Open this URL in Chrome / Edge / Brave on a desktop computer** with the DevTools open (F12 → Network tab, enable *Preserve log*):\n\n[Open the authorization URL]({authorize_url})\n\nLog in with your Miele account. The browser will refuse to navigate the final `miele://oauth2-code/?code=…&state=…` redirect — that's expected. In DevTools → Network, find the **last request whose URL starts with `miele://`** (usually highlighted red), right-click it → *Copy → Copy link address*. **Paste that full `miele://oauth2-code/...` URL below.**",
         "data": {
           "redirect_url": "Pasted miele://oauth2-code/?code=… URL"
         }

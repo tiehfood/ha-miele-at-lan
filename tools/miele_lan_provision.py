@@ -13,7 +13,7 @@ normally drives:
   5. (optional) POST /Subscriptions  — register an HA callback URL while we
      still have elevated rights. Skipped if --no-subscribe.
   6. Verify by signing `GET /Devices` with the new keys (asyncmiele path).
-  7. Emit a paste-into-HA setup blob (base64 JSON) and a research/keys.yaml
+  7. Emit a paste-into-HA setup blob (base64 JSON) and a .claude/research/keys.yaml
      append-block.
 
 Steps 2 and 4 use *unauthenticated* HTTPS/HTTP PUTs — same as MieleRESTServer's
@@ -422,7 +422,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pc = sub.add_parser("commission", help="Push GroupID/GroupKey to a provisioned-but-unkeyed device.")
     pc.add_argument("--device", required=True, help="Appliance IP on the home WiFi (post-WiFi step)")
-    pc.add_argument("--out", default="research/keys.yaml", help="Where to save the new keys")
+    pc.add_argument("--out", default=".claude/research/keys.yaml", help="Where to save the new keys")
     pc.add_argument("--endpoint", default="oven", help="Endpoint name to use in keys.yaml")
     pc.add_argument("--no-verify", action="store_true", help="Skip the post-commission signed verify")
     pc.add_argument("--group-id", help="Use this GroupID (16 hex chars) instead of generating one")
@@ -440,7 +440,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pv = sub.add_parser("verify", help="Verify stored keys against a live device.")
     pv.add_argument("--device", help="(unused — kept for symmetry)")
-    pv.add_argument("--keys", default="research/keys.yaml")
+    pv.add_argument("--keys", default=".claude/research/keys.yaml")
     pv.add_argument("--endpoint", default="oven")
     pv.set_defaults(func=cmd_verify)
     return p
