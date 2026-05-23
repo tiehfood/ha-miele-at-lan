@@ -88,10 +88,20 @@ Same flow works in Firefox (DevTools → Network → look for the blocked `miele
 - **No firmware update trigger.** Read-only `/Update/`.
 - **`Mobile Controllable` on the panel** gates writes on cycle appliances (oven, dishwasher, washer/dryer). Enable it once on the appliance display before HA writes will succeed.
 - **One household per HA install.** Multiple Miele households need separate HA instances.
+- **mDNS is required.** Discovery, fab→IP resolution, and SuperVision push delivery all rely on `_mieleathome._tcp.local.` traffic flowing between HA and the appliances. HA and the appliances must share a broadcast domain (same VLAN, no Docker bridge in between, no IoT-VLAN isolation).
 
 ## Troubleshooting
 
-**Appliance not discovered?** Make sure HA and the appliance are on the same VLAN — Miele mDNS won't cross routed boundaries. Check `Settings → Devices & services → Discover devices` shows `_mieleathome._tcp` entries.
+**Appliance not discovered?** Miele mDNS won't cross routed boundaries — HA and the appliance must be on the same broadcast domain (same VLAN, no Docker bridge in between, no IoT-VLAN isolation rule). To check whether HA is actually receiving Miele mDNS, open the HA terminal add-on (or SSH in) and run:
+
+```sh
+# Home Assistant OS / Debian / most Linux
+avahi-browse -rt _mieleathome._tcp
+# macOS
+dns-sd -B _mieleathome._tcp local.
+```
+
+If nothing appears, your network is dropping the multicast — fix that before going further. Common culprits: IGMP-snooping on a managed switch with no IGMP querier, a VLAN ACL between HA and the appliance subnet, an mDNS-blocking firewall rule, or HA running in a Docker bridge (use `network_mode: host`).
 
 **Push not firing (sensors only update every 30 s)?** Verify `Mobile Controllable` is on at the appliance, and that HA's listener port (default 18082) is reachable from the appliance subnet. Look for `push:active` in the diagnostic Push State sensor.
 
