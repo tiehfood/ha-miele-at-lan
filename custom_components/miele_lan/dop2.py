@@ -27,12 +27,19 @@ the RootNode encoding in akappner/dop2rs:
         0x05 U16  (2B)   0x06 I16 (2B)   0x07 E16 (2B)
         0x08 U32  (4B)   0x09 I32 (4B)   0x0a E32 (4B)
         0x0b U64  (8B)   0x0c I64 (8B)   0x0d E64 (8B)
+
+    Nested/container type codes:
+        0x10 MStruct   — u16 field_count, then field_count × (u16 idx, u8 type, value)
+        0x17 ArrayE16  — u16 element_count, then element_count × u16
+        0x20 MString   — u16 byte_length, then byte_length bytes UTF-8
+        0x21 AStruct   — u16 element_count, then element_count × (u16 field_count, fields...)
 """
 
 from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -90,6 +97,186 @@ def parse_simple_leaf(payload: bytes) -> tuple[int, int, list[Dop2Attribute]]:
         off += size
         attrs.append(Dop2Attribute(index=idx, type_code=t, value=v))
     return unit, attribute, attrs
+
+
+# ---------------------------------------------------------------------------
+# Nested MStruct walker
+# ---------------------------------------------------------------------------
+
+def _walk_fields(buf: bytes, off: int, count: int) -> tuple[dict[int, tuple[int, Any]], int]:
+    """Walk `count` DOP2 fields starting at `off`, returning (field_dict, new_off).
+
+    field_dict maps field_index → (type_tag, decoded_value).
+    Decoded value for MStruct is a nested dict; for AStruct a list of dicts;
+    for ArrayE16 a list of ints; for MString a str; for scalars an int/bool.
+    Unknown type tags are stored with value None and iteration continues.
+    """
+    result: dict[int, tuple[int, Any]] = {}
+    for _ in range(count):
+        if off + 3 > len(buf):
+            break
+        idx = struct.unpack_from(">H", buf, off)[0]
+        t = buf[off + 2]
+        off += 3
+
+        if t in _FIXED_SIZE_TYPES:
+            sz, fmt = _FIXED_SIZE_TYPES[t]
+            if off + sz > len(buf):
+                break
+            v = struct.unpack_from(fmt, buf, off)[0]
+            off += sz
+            result[idx] = (t, v)
+
+        elif t == 0x10:  # MStruct
+            if off + 2 > len(buf):
+                break
+            inner_count = struct.unpack_from(">H", buf, off)[0]
+            off += 2
+            sub, off = _walk_fields(buf, off, inner_count)
+            result[idx] = (t, sub)
+
+        elif t == 0x21:  # AStruct
+            if off + 2 > len(buf):
+                break
+            elem_count = struct.unpack_from(">H", buf, off)[0]
+            off += 2
+            elems: list[dict[int, tuple[int, Any]]] = []
+            for _ in range(elem_count):
+                if off + 2 > len(buf):
+                    break
+                fc = struct.unpack_from(">H", buf, off)[0]
+                off += 2
+                elem_dict, off = _walk_fields(buf, off, fc)
+                elems.append(elem_dict)
+            result[idx] = (t, elems)
+
+        elif t == 0x17:  # ArrayE16
+            if off + 2 > len(buf):
+                break
+            arr_len = struct.unpack_from(">H", buf, off)[0]
+            off += 2
+            arr: list[int] = []
+            for _ in range(arr_len):
+                if off + 2 > len(buf):
+                    break
+                arr.append(struct.unpack_from(">H", buf, off)[0])
+                off += 2
+            result[idx] = (t, arr)
+
+        elif t == 0x20:  # MString
+            if off + 2 > len(buf):
+                break
+            str_len = struct.unpack_from(">H", buf, off)[0]
+            off += 2
+            s = buf[off:off + str_len].decode("utf-8", errors="replace")
+            off += str_len
+            result[idx] = (t, s)
+
+        else:
+            result[idx] = (t, None)
+
+    return result, off
+
+
+def parse_struct(buf: bytes, off: int) -> dict[int, tuple[int, Any]]:
+    """Walk a DOP2 MStruct body starting at byte offset `off`.
+
+    Returns a dict mapping field_index → (type_tag, decoded_value).
+    Suitable for calling on the stripped body of any leaf whose root
+    type is MStruct (i.e. after stripping the 12-byte root header and
+    reading the u16 field count).
+    """
+    if off + 2 > len(buf):
+        return {}
+    count = struct.unpack_from(">H", buf, off)[0]
+    off += 2
+    result, _ = _walk_fields(buf, off, count)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Typed convenience helper for GLOBAL_DeviceContext (DOP2 2/1585)
+# ---------------------------------------------------------------------------
+
+_WASH2DRY_LABELS: dict[int, str] = {
+    0: "not_active",
+    1: "activatable",
+    2: "active",
+    3: "ready_to_receive",
+    4: "program_received",
+    5: "no_program_available",
+}
+
+
+def _decode_dos_container(c: dict[int, tuple[int, Any]]) -> dict[str, Any]:
+    bitmask = c.get(2, (None, 0))[1] or 0
+    filling_level_struct = c.get(6, (None, {}))[1] or {}
+    fill_pct = (filling_level_struct.get(2, (None, None))[1]
+                if isinstance(filling_level_struct, dict) else None)
+    return {
+        "bitmask_inserted": bool(bitmask & 0x01),
+        "bitmask_empty": bool(bitmask & 0x02),
+        "bitmask_supported": bool(bitmask & 0x04),
+        "bitmask_active": bool(bitmask & 0x08),
+        "bitmask_low_level": bool(bitmask & 0x10),
+        "container_size_ml": c.get(3, (None, None))[1],
+        "initial_dosage_ml": c.get(4, (None, None))[1],
+        "current_dosage_ml": c.get(5, (None, None))[1],
+        "filling_level_pct": fill_pct,
+    }
+
+
+def parse_global_device_context(payload: bytes) -> dict[str, Any]:
+    """DOP2 2/1585 — GLOBAL_DeviceContext.
+
+    Strips the 12-byte root header and walks the nested MStruct, returning
+    a typed convenience dict with the fields relevant to sensor entities.
+    Returns an empty dict on any structural error.
+    """
+    if len(payload) < 12:
+        return {}
+    root_count = struct.unpack_from(">H", payload, 10)[0]
+    root, _ = _walk_fields(payload, 12, root_count)
+
+    device_state: dict[str, int] | None = None
+    f1 = root.get(1)
+    if f1 and f1[0] == 0x10 and isinstance(f1[1], dict):
+        inner = f1[1]
+        device_state = {
+            "appliance_state": inner.get(1, (None, 0))[1],
+            "operation_state": inner.get(2, (None, 0))[1],
+            "process_state": inner.get(3, (None, 0))[1],
+        }
+
+    prog: dict | None = None
+    f5 = root.get(5)
+    if f5 and f5[0] == 0x10 and isinstance(f5[1], dict):
+        prog = f5[1]
+
+    device_attributes: dict | None = None
+    dos_containers: list[dict] | None = None
+
+    f6 = root.get(6)
+    if f6 and f6[0] == 0x10 and isinstance(f6[1], dict):
+        device_attributes = f6[1]
+        f7 = device_attributes.get(7)
+        if f7 and f7[0] == 0x21 and isinstance(f7[1], list):
+            dos_containers = [_decode_dos_container(c) for c in f7[1]]
+
+    wash2dry_raw: int | None = None
+    f16 = root.get(16)
+    if f16 is not None:
+        wash2dry_raw = f16[1]
+
+    return {
+        "device_state": device_state,
+        "prog": prog,
+        "device_attributes_dwtdwm": device_attributes,
+        "dos_containers": dos_containers,
+        "wash2dry_state": (
+            _WASH2DRY_LABELS.get(wash2dry_raw) if wash2dry_raw is not None else None
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
