@@ -993,6 +993,29 @@
       "hours_of_operation": {
         "name": "Betriebsstunden"
       },
+      "twindos_1_level": {
+        "name": "TwinDos Kammer 1 Füllstand"
+      },
+      "twindos_2_level": {
+        "name": "TwinDos Kammer 2 Füllstand"
+      },
+      "twindos_1_dosage": {
+        "name": "TwinDos Kammer 1 Dosierung"
+      },
+      "twindos_2_dosage": {
+        "name": "TwinDos Kammer 2 Dosierung"
+      },
+      "wash2dry_state": {
+        "name": "Wash2Dry Status",
+        "state": {
+          "not_active": "Inaktiv",
+          "activatable": "Aktivierbar",
+          "active": "Aktiv",
+          "ready_to_receive": "Bereit zum Empfangen",
+          "program_received": "Programm empfangen",
+          "no_program_available": "Kein Programm verfügbar"
+        }
+      },
       "push_mode": {
         "name": "Push-Status",
         "state": {
@@ -2104,6 +2127,12 @@
       },
       "plate_6_ankochautomatik": {
         "name": "Kochzone 6 Ankochautomatik"
+      },
+      "twindos_1_empty": {
+        "name": "TwinDos Kammer 1 leer"
+      },
+      "twindos_2_empty": {
+        "name": "TwinDos Kammer 2 leer"
       }
     },
     "switch": {

@@ -21,6 +21,7 @@ from .const import (
     DOMAIN,
     DOORED_FAMILY,
     HOB_FAMILY,
+    LAUNDRY_FAMILY,
     WINE_FAMILY,
     MieleAppliance,
 )
@@ -42,6 +43,46 @@ class MieleLanBinarySensorDescription(BinarySensorEntityDescription):
 class MieleLanBinarySensorDef:
     types: tuple[MieleAppliance, ...]
     description: MieleLanBinarySensorDescription
+
+
+@dataclass(frozen=True, kw_only=True)
+class MieleLanDeviceContextBinarySensorDescription(BinarySensorEntityDescription):
+    is_on_fn: Callable[[dict[str, Any]], bool | None]
+    container_index: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class MieleLanDeviceContextBinarySensorDef:
+    types: tuple[MieleAppliance, ...]
+    description: MieleLanDeviceContextBinarySensorDescription
+
+
+DEVICE_CONTEXT_BINARY_SENSORS: tuple[MieleLanDeviceContextBinarySensorDef, ...] = (
+    MieleLanDeviceContextBinarySensorDef(
+        types=LAUNDRY_FAMILY,
+        description=MieleLanDeviceContextBinarySensorDescription(
+            key="twindos_1_empty",
+            translation_key="twindos_1_empty",
+            entity_category=EntityCategory.DIAGNOSTIC,
+            container_index=0,
+            is_on_fn=lambda ctx: (
+                (ctx.get("dos_containers") or [None])[0] or {}
+            ).get("bitmask_empty"),
+        ),
+    ),
+    MieleLanDeviceContextBinarySensorDef(
+        types=LAUNDRY_FAMILY,
+        description=MieleLanDeviceContextBinarySensorDescription(
+            key="twindos_2_empty",
+            translation_key="twindos_2_empty",
+            entity_category=EntityCategory.DIAGNOSTIC,
+            container_index=1,
+            is_on_fn=lambda ctx: (
+                (ctx.get("dos_containers") or [None, None])[1] or {}
+            ).get("bitmask_empty"),
+        ),
+    ),
+)
 
 
 BINARY_SENSOR_TYPES: tuple[MieleLanBinarySensorDef, ...] = (
@@ -223,6 +264,14 @@ async def async_setup_entry(
                 if int(key.rsplit("_", 1)[1]) not in door_zones:
                     continue
             entities.append(MieleLanBinarySensor(coord, d.description))
+        for d in DEVICE_CONTEXT_BINARY_SENSORS:
+            if dt not in d.types:
+                continue
+            ci = d.description.container_index
+            containers = coord.data.device_context.get("dos_containers") if coord.data else None
+            if not containers or len(containers) <= ci:
+                continue
+            entities.append(MieleLanDeviceContextBinarySensor(coord, d.description))
     async_add_entities(entities)
 
 
@@ -243,5 +292,26 @@ class MieleLanBinarySensor(MieleLanEntity, BinarySensorEntity):
             return None
         try:
             return self.entity_description.is_on_fn(self.coordinator.data.state)
+        except Exception:  # noqa: BLE001
+            return None
+
+
+class MieleLanDeviceContextBinarySensor(MieleLanEntity, BinarySensorEntity):
+    entity_description: MieleLanDeviceContextBinarySensorDescription
+
+    def __init__(
+        self,
+        coordinator: MieleLanCoordinator,
+        description: MieleLanDeviceContextBinarySensorDescription,
+    ) -> None:
+        super().__init__(coordinator, description.key)
+        self.entity_description = description
+
+    @property
+    def is_on(self) -> bool | None:
+        if not self.coordinator.data:
+            return None
+        try:
+            return self.entity_description.is_on_fn(self.coordinator.data.device_context)
         except Exception:  # noqa: BLE001
             return None

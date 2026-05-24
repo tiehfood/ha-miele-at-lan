@@ -661,6 +661,96 @@ DOP2_SENSORS: tuple[MieleLanDop2SensorDef, ...] = (
 )
 
 
+@dataclass(frozen=True, kw_only=True)
+class MieleLanDeviceContextSensorDescription(SensorEntityDescription):
+    value_fn: Callable[[dict[str, Any]], Any]
+    container_index: int | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class MieleLanDeviceContextSensorDef:
+    types: tuple[MieleAppliance, ...]
+    description: MieleLanDeviceContextSensorDescription
+
+
+_WASH2DRY_OPTIONS = [
+    "not_active", "activatable", "active",
+    "ready_to_receive", "program_received", "no_program_available",
+]
+
+
+def _dos_container_value(
+    ctx: dict[str, Any], idx: int, key: str
+) -> Any:
+    containers = ctx.get("dos_containers")
+    if not containers or len(containers) <= idx:
+        return None
+    c = containers[idx]
+    if not c.get("bitmask_inserted"):
+        return None
+    return c.get(key)
+
+
+DEVICE_CONTEXT_SENSORS: tuple[MieleLanDeviceContextSensorDef, ...] = (
+    MieleLanDeviceContextSensorDef(
+        types=LAUNDRY_FAMILY,
+        description=MieleLanDeviceContextSensorDescription(
+            key="twindos_1_level",
+            translation_key="twindos_1_level",
+            native_unit_of_measurement="%",
+            entity_category=EntityCategory.DIAGNOSTIC,
+            container_index=0,
+            value_fn=lambda ctx: _dos_container_value(ctx, 0, "filling_level_pct"),
+        ),
+    ),
+    MieleLanDeviceContextSensorDef(
+        types=LAUNDRY_FAMILY,
+        description=MieleLanDeviceContextSensorDescription(
+            key="twindos_2_level",
+            translation_key="twindos_2_level",
+            native_unit_of_measurement="%",
+            entity_category=EntityCategory.DIAGNOSTIC,
+            container_index=1,
+            value_fn=lambda ctx: _dos_container_value(ctx, 1, "filling_level_pct"),
+        ),
+    ),
+    MieleLanDeviceContextSensorDef(
+        types=LAUNDRY_FAMILY,
+        description=MieleLanDeviceContextSensorDescription(
+            key="twindos_1_dosage",
+            translation_key="twindos_1_dosage",
+            native_unit_of_measurement="mL",
+            entity_category=EntityCategory.DIAGNOSTIC,
+            container_index=0,
+            value_fn=lambda ctx: _dos_container_value(ctx, 0, "current_dosage_ml"),
+        ),
+    ),
+    MieleLanDeviceContextSensorDef(
+        types=LAUNDRY_FAMILY,
+        description=MieleLanDeviceContextSensorDescription(
+            key="twindos_2_dosage",
+            translation_key="twindos_2_dosage",
+            native_unit_of_measurement="mL",
+            entity_category=EntityCategory.DIAGNOSTIC,
+            container_index=1,
+            value_fn=lambda ctx: _dos_container_value(ctx, 1, "current_dosage_ml"),
+        ),
+    ),
+    MieleLanDeviceContextSensorDef(
+        types=LAUNDRY_FAMILY,
+        description=MieleLanDeviceContextSensorDescription(
+            key="wash2dry_state",
+            translation_key="wash2dry_state",
+            device_class=SensorDeviceClass.ENUM,
+            options=_WASH2DRY_OPTIONS,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            container_index=None,
+            value_fn=lambda ctx: ctx.get("wash2dry_state"),
+        ),
+    ),
+)
+
+
 # WLAN connection info — surfaced from the device's `/WLAN/` endpoint.
 WLAN_SENSORS: tuple[MieleLanWlanSensorDef, ...] = (
     MieleLanWlanSensorDef(
@@ -790,6 +880,15 @@ async def async_setup_entry(
         for d in DOP2_SENSORS:
             if dt in d.types:
                 entities.append(MieleLanDop2Sensor(coord, d.description))
+        for d in DEVICE_CONTEXT_SENSORS:
+            if dt not in d.types:
+                continue
+            ci = d.description.container_index
+            if ci is not None:
+                containers = coord.data.device_context.get("dos_containers") if coord.data else None
+                if not containers or len(containers) <= ci:
+                    continue
+            entities.append(MieleLanDeviceContextSensor(coord, d.description))
         # Diagnostic push-mode sensor — applies to every appliance.
         entities.append(MieleLanPushStateSensor(coord))
     async_add_entities(entities)
@@ -942,6 +1041,27 @@ class MieleLanDop2Sensor(MieleLanEntity, SensorEntity):
             return None
         try:
             return self.entity_description.value_fn(self.coordinator.data.dop2)
+        except Exception:  # noqa: BLE001
+            return None
+
+
+class MieleLanDeviceContextSensor(MieleLanEntity, SensorEntity):
+    entity_description: MieleLanDeviceContextSensorDescription
+
+    def __init__(
+        self,
+        coordinator: MieleLanCoordinator,
+        description: MieleLanDeviceContextSensorDescription,
+    ) -> None:
+        super().__init__(coordinator, description.key)
+        self.entity_description = description
+
+    @property
+    def native_value(self) -> Any:
+        if not self.coordinator.data:
+            return None
+        try:
+            return self.entity_description.value_fn(self.coordinator.data.device_context)
         except Exception:  # noqa: BLE001
             return None
 

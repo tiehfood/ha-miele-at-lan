@@ -21,8 +21,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MieleLanClient
-from .const import DOMAIN, OVEN_FAMILY, MieleAppliance
-from .dop2 import parse_hours_of_operation
+from .const import DOMAIN, LAUNDRY_FAMILY, OVEN_FAMILY, MieleAppliance
+from .dop2 import parse_global_device_context, parse_hours_of_operation
 from .enrollment import EnrolledDevice
 from .push_listener import PushEvent
 
@@ -34,6 +34,8 @@ DOP2_REFRESH_INTERVAL = 600  # seconds — hours-of-operation barely changes; we
                              # only need to refresh ~once every 10 minutes.
 WLAN_REFRESH_INTERVAL = 300  # seconds — RSSI/signal-percentage drift slowly;
                              # 5-minute cadence keeps values roughly current.
+DEVICE_CONTEXT_REFRESH_INTERVAL = 600  # seconds — TwinDos fill level and wash2dry
+                                       # state evolve on a per-cycle timescale.
 
 
 @dataclass
@@ -44,6 +46,7 @@ class MieleLanData:
     ident: dict[str, Any] = field(default_factory=dict)
     wlan: dict[str, Any] = field(default_factory=dict)
     dop2: dict[str, Any] = field(default_factory=dict)
+    device_context: dict[str, Any] = field(default_factory=dict)
 
 
 class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
@@ -77,6 +80,8 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         self._dop2_last_fetch: float = 0.0
         self._dop2_unsupported = False
         self._wlan_last_fetch: float = 0.0
+        self._device_context_last_fetch: float = 0.0
+        self._device_context_unsupported: bool = False
         self._last_push_at: float | None = None
         self._push_count = 0
 
@@ -143,6 +148,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 self._ident_loaded = True
             await self._maybe_refresh_wlan()
             await self._maybe_refresh_dop2()
+            await self._maybe_refresh_device_context()
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(str(err)) from err
         return self._data
@@ -198,6 +204,44 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
             self._data.dop2["hours_of_operation"] = parse_hours_of_operation(body)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("[%s] DOP2 2/119 parse failed: %s", self.fab, err)
+
+    async def _maybe_refresh_device_context(self) -> None:
+        """Refresh GLOBAL_DeviceContext (DOP2 2/1585) for laundry-family devices.
+
+        Carries TwinDos fill-level and dosage, plus Wash2DryState. Only
+        available at HAN tier on devices whose firmware routes DOP2 unit 2
+        (e.g. WTW870). On devices that don't expose it (TWC660WP, EK057 FW
+        08.32) the first 404/403 latches the unsupported flag so we never
+        retry.
+        """
+        if self._device_context_unsupported:
+            return
+        if self.device_type not in LAUNDRY_FAMILY:
+            return
+        now = time.monotonic()
+        if now - self._device_context_last_fetch < DEVICE_CONTEXT_REFRESH_INTERVAL:
+            return
+        self._device_context_last_fetch = now
+        try:
+            st, body = await self.client.raw._request_bytes(
+                "GET",
+                f"/Devices/{self.fab}/DOP2/2/1585?idx1=0&idx2=0",
+                allowed_status=(200, 403, 404),
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("[%s] DOP2 2/1585 fetch failed: %s", self.fab, err)
+            return
+        if st != 200:
+            self._device_context_unsupported = True
+            _LOGGER.debug(
+                "[%s] DOP2 2/1585 returned %d — disabling device-context reads on this device",
+                self.fab, st,
+            )
+            return
+        try:
+            self._data.device_context = parse_global_device_context(body)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("[%s] DOP2 2/1585 parse failed: %s", self.fab, err)
 
     async def _fetch_wlan(self) -> dict[str, Any]:
         """Read `/WLAN/` once at first refresh. The device exposes its current

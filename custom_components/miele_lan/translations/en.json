@@ -992,6 +992,29 @@
       "hours_of_operation": {
         "name": "Hours of operation"
       },
+      "twindos_1_level": {
+        "name": "TwinDos compartment 1 fill level"
+      },
+      "twindos_2_level": {
+        "name": "TwinDos compartment 2 fill level"
+      },
+      "twindos_1_dosage": {
+        "name": "TwinDos compartment 1 dosage"
+      },
+      "twindos_2_dosage": {
+        "name": "TwinDos compartment 2 dosage"
+      },
+      "wash2dry_state": {
+        "name": "Wash2Dry state",
+        "state": {
+          "not_active": "Not active",
+          "activatable": "Activatable",
+          "active": "Active",
+          "ready_to_receive": "Ready to receive",
+          "program_received": "Program received",
+          "no_program_available": "No program available"
+        }
+      },
       "push_mode": {
         "name": "Push status",
         "state": {
@@ -2094,6 +2117,12 @@
       },
       "plate_6_ankochautomatik": {
         "name": "Cooking zone 6 auto pre-boil"
+      },
+      "twindos_1_empty": {
+        "name": "TwinDos compartment 1 empty"
+      },
+      "twindos_2_empty": {
+        "name": "TwinDos compartment 2 empty"
       }
     },
     "switch": {
