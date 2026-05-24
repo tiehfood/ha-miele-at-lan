@@ -21,8 +21,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MieleLanClient
-from .const import DOMAIN, OVEN_FAMILY, MieleAppliance
-from .dop2 import parse_hours_of_operation
+from .const import DOMAIN, LAUNDRY_FAMILY, OVEN_FAMILY, MieleAppliance
+from .dop2 import parse_hours_of_operation, parse_twindos_1585
 from .enrollment import EnrolledDevice
 from .push_listener import PushEvent
 
@@ -173,7 +173,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         """
         if self._dop2_unsupported:
             return
-        if self.device_type not in OVEN_FAMILY:
+        if self.device_type not in (*OVEN_FAMILY, *LAUNDRY_FAMILY):
             return
         now = time.monotonic()
         if now - self._dop2_last_fetch < DOP2_REFRESH_INTERVAL:
@@ -199,6 +199,26 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("[%s] DOP2 2/119 parse failed: %s", self.fab, err)
 
+        if self.device_type in LAUNDRY_FAMILY:
+            try:
+                st, body = await self.client.raw._request_bytes(
+                    "GET",
+                    f"/Devices/{self.fab}/DOP2/2/1585?idx1=0&idx2=0",
+                    allowed_status=(200, 403, 404),
+                )
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("[%s] DOP2 2/1585 fetch failed: %s", self.fab, err)
+                return
+
+            if st != 200:
+                _LOGGER.debug("[%s] DOP2 2/1585 returned %d", self.fab, st)
+                return
+
+            try:
+                self._data.dop2["twindos"] = parse_twindos_1585(body)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("[%s] DOP2 2/1585 parse failed: %s", self.fab, err)  
+  
     async def _fetch_wlan(self) -> dict[str, Any]:
         """Read `/WLAN/` once at first refresh. The device exposes its current
         WiFi config + RSSI/signal-strength here (no auth needed beyond the
