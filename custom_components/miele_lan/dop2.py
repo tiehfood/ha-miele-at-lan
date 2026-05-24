@@ -118,3 +118,47 @@ def parse_hours_of_operation(payload: bytes) -> dict[str, int]:
     }
     return {labels[a.index]: a.value for a in attrs
             if a.index in labels and isinstance(a.value, int)}
+
+
+def parse_twindos_1585(payload: bytes) -> dict[str, int]:
+    """Parse TwinDos levels from DOP2 2/1585.
+
+    Observed on WTW870:
+      - marker `07 21 00 02` starts a list with two TwinDos entries
+      - `05 05 00 XX` is dosage in ml
+      - first nested `06 10 ... 02 02 XX` is fill level in percent
+    """
+    marker = bytes.fromhex("07 21 00 02")
+    pos = payload.find(marker)
+    if pos < 0:
+        return {}
+
+    section = payload[pos:]
+    entry_marker = bytes.fromhex("00 08 00 02 02 01 00 03 05")
+    entries: list[int] = []
+    start = 0
+
+    while True:
+        i = section.find(entry_marker, start)
+        if i < 0:
+            break
+        entries.append(pos + i)
+        start = i + len(entry_marker)
+
+    result: dict[str, int] = {}
+
+    for idx, start_abs in enumerate(entries[:2], start=1):
+        next_abs = entries[idx] if idx < len(entries) else min(len(payload), start_abs + 220)
+        block = payload[start_abs:next_abs]
+
+        dosage_pat = bytes.fromhex("05 05 00")
+        dosage_pos = block.find(dosage_pat)
+        if dosage_pos >= 0 and dosage_pos + len(dosage_pat) < len(block):
+            result[f"compartment_{idx}_dosage_ml"] = block[dosage_pos + len(dosage_pat)]
+
+        fill_pat = bytes.fromhex("06 10 00 03 00 01 02 08 00 02 02")
+        fill_pos = block.find(fill_pat)
+        if fill_pos >= 0 and fill_pos + len(fill_pat) < len(block):
+            result[f"compartment_{idx}_fill_level"] = block[fill_pos + len(fill_pat)]
+
+    return result
