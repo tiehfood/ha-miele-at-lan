@@ -19,7 +19,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
+from homeassistant.const import EntityCategory, PERCENTAGE, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -658,6 +658,26 @@ DOP2_SENSORS: tuple[MieleLanDop2SensorDef, ...] = (
             value_fn=lambda d: (d.get("hours_of_operation") or {}).get("total"),
         ),
     ),
+    MieleLanDop2SensorDef(
+        types=LAUNDRY_FAMILY,
+        description=MieleLanDop2SensorDescription(
+            key="twindos_compartment_1_fill_level",
+            translation_key="twindos_compartment_1_fill_level",
+            native_unit_of_measurement=PERCENTAGE,
+            state_class=SensorStateClass.MEASUREMENT,
+            value_fn=lambda d: (d.get("twindos") or {}).get("compartment_1_fill_level"),
+        ),
+    ),
+    MieleLanDop2SensorDef(
+        types=LAUNDRY_FAMILY,
+        description=MieleLanDop2SensorDescription(
+            key="twindos_compartment_2_fill_level",
+            translation_key="twindos_compartment_2_fill_level",
+            native_unit_of_measurement=PERCENTAGE,
+            state_class=SensorStateClass.MEASUREMENT,
+            value_fn=lambda d: (d.get("twindos") or {}).get("compartment_2_fill_level"),
+        ),
+    ),    
 )
 
 
