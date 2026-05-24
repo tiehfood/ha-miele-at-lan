@@ -655,7 +655,11 @@ DOP2_SENSORS: tuple[MieleLanDop2SensorDef, ...] = (
             native_unit_of_measurement=UnitOfTime.HOURS,
             state_class=SensorStateClass.TOTAL_INCREASING,
             entity_category=EntityCategory.DIAGNOSTIC,
-            value_fn=lambda d: (d.get("hours_of_operation") or {}).get("total"),
+            value_fn=lambda d: (
+                round(v / 60, 1)
+                if (v := (d.get("hours_of_operation") or {}).get("total")) is not None
+                else None
+            ),
         ),
     ),
 )

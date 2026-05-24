@@ -293,7 +293,11 @@ def parse_hours_of_operation(payload: bytes) -> dict[str, int]:
       4 → hoursOfOperationMode1
       5 → hoursOfOperationMode2
 
-    Verified live on H7560BP: 3302 / 0 / 3302 / 0 / 0.
+    All five raw U32 values are in **minutes**, not hours. The
+    ValueInterpretation enum in the firmware defines DurationMin=6 but has
+    no DurationHours entry; observed evidence (3302→3337 over ~14 h of
+    wall-clock time, ~35 min of actual cooking) confirms the unit.
+    The sensor layer is responsible for converting to hours for display.
     """
     _, _, attrs = parse_simple_leaf(payload)
     labels = {
