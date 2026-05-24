@@ -32,6 +32,8 @@ POLL_FALLBACK_INTERVAL = 60  # seconds — slower than the active poll we used t
                              # because push handles the real-time work.
 DOP2_REFRESH_INTERVAL = 600  # seconds — hours-of-operation barely changes; we
                              # only need to refresh ~once every 10 minutes.
+WLAN_REFRESH_INTERVAL = 300  # seconds — RSSI/signal-percentage drift slowly;
+                             # 5-minute cadence keeps values roughly current.
 
 
 @dataclass
@@ -74,6 +76,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         self._ident_loaded = False
         self._dop2_last_fetch: float = 0.0
         self._dop2_unsupported = False
+        self._wlan_last_fetch: float = 0.0
         self._last_push_at: float | None = None
         self._push_count = 0
 
@@ -131,18 +134,33 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         return "polling"
 
     async def _async_update_data(self) -> MieleLanData:
-        """Polled fallback: refresh /State and (once) /Ident + /WLAN."""
+        """Polled fallback: refresh /State and (once) /Ident; WLAN on slow cadence."""
         try:
             state = await self.client.get_state()
             self._data.state = dict(state.raw_state)
             if not self._ident_loaded:
                 self._data.ident = await self._fetch_full_ident()
-                self._data.wlan = await self._fetch_wlan()
                 self._ident_loaded = True
+            await self._maybe_refresh_wlan()
             await self._maybe_refresh_dop2()
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(str(err)) from err
         return self._data
+
+    async def _maybe_refresh_wlan(self) -> None:
+        """Refresh /WLAN/ on a slow cadence, and immediately when data is absent.
+
+        Retry-on-empty is why this is separate from the one-shot _ident_loaded
+        gate: a transient failure at first refresh must self-heal on the next
+        poll without waiting WLAN_REFRESH_INTERVAL.
+        """
+        now = time.monotonic()
+        if self._data.wlan and now - self._wlan_last_fetch < WLAN_REFRESH_INTERVAL:
+            return
+        result = await self._fetch_wlan()
+        if result:
+            self._data.wlan = result
+            self._wlan_last_fetch = now
 
     async def _maybe_refresh_dop2(self) -> None:
         """Refresh DOP2-sourced diagnostics for device types that expose them.
