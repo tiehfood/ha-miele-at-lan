@@ -107,6 +107,10 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 return MieleAppliance.UNKNOWN
         return MieleAppliance.UNKNOWN
 
+    @property
+    def dop2_supported(self) -> bool:
+        return not self._dop2_unsupported
+
     # --------- diagnostic helpers (used by the diagnostic sensor) ---------
     @property
     def last_push_at(self) -> float | None:

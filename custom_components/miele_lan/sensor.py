@@ -112,7 +112,7 @@ STATUS_LABELS = enums.StateStatus
 PROGRAM_TYPE_LABELS = enums.StateProgramType
 PROCESS_ACTION_LABELS = {0: "no_action", 1: "start", 2: "stop", 3: "pause", 6: "resume"}
 DEVICE_ACTION_LABELS = {0: "no_action", 1: "start_remote", 2: "wake_up", 3: "go_to_standby"}
-STANDBY_STATE_LABELS = {0: "not_in_standby", 1: "network_idle", 2: "deep_standby"}
+STANDBY_STATE_LABELS = {0: "not_in_standby", 1: "network_idle", 2: "deep_standby", 3: "going_to_standby"}
 SYNC_STATE_LABELS = {0: "unknown", 1: "synced", 2: "out_of_sync"}
 REMOTE_LABELS = {0: "disabled", 7: "enabled_but_not_possible", 15: "full"}
 
@@ -122,6 +122,16 @@ def _enum(state: dict[str, Any], key: str, labels: dict[int, str]) -> str | None
     if not isinstance(v, int):
         return None
     return labels.get(v) or str(v)
+
+
+def _enum_option(state: dict[str, Any], key: str, labels: dict[int, str]) -> str | None:
+    """Like _enum but for ENUM-class sensors: unmapped firmware codes return "unknown"
+    instead of str(v), keeping the returned value always within the declared options list.
+    Firmware variants emitting undocumented codes are a genuine I/O-boundary case."""
+    v = state.get(key)
+    if not isinstance(v, int):
+        return None
+    return labels.get(v, "unknown")
 
 
 def _is_idle(state: dict[str, Any]) -> bool:
@@ -139,6 +149,14 @@ def _gated_enum(key: str, labels: dict[int, str]) -> Callable[[dict[str, Any]], 
         if _is_idle(state):
             return None
         return _enum(state, key, labels)
+    return fn
+
+
+def _gated_enum_option(key: str, labels: dict[int, str]) -> Callable[[dict[str, Any]], Any]:
+    def fn(state: dict[str, Any]) -> Any:
+        if _is_idle(state):
+            return None
+        return _enum_option(state, key, labels)
     return fn
 
 
@@ -199,6 +217,7 @@ def _utc_iso_now_plus(minutes: int | None) -> str | None:
 @dataclass(frozen=True, kw_only=True)
 class MieleLanSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any]
+    required_state_key: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -228,8 +247,8 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             key="status",
             translation_key="status",
             device_class=SensorDeviceClass.ENUM,
-            options=list(set(STATUS_LABELS.values())),
-            value_fn=lambda s: _enum(s, "Status", STATUS_LABELS),
+            options=[*sorted(set(STATUS_LABELS.values())), "unknown"],
+            value_fn=lambda s: _enum_option(s, "Status", STATUS_LABELS),
         ),
     ),
     # ProgramID / ProgramPhase use *device-type-aware* tables (see
@@ -258,8 +277,8 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             key="program_type",
             translation_key="program_type",
             device_class=SensorDeviceClass.ENUM,
-            options=list(set(PROGRAM_TYPE_LABELS.values())),
-            value_fn=_gated_enum("ProgramType", PROGRAM_TYPE_LABELS),
+            options=[*sorted(set(PROGRAM_TYPE_LABELS.values())), "unknown"],
+            value_fn=_gated_enum_option("ProgramType", PROGRAM_TYPE_LABELS),
         ),
     ),
     # Times — only cycle devices. Gated: while the firmware reports last-cycle
@@ -374,10 +393,12 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             translation_key="remote_control",
             entity_category=EntityCategory.DIAGNOSTIC,
             device_class=SensorDeviceClass.ENUM,
-            options=list(set(REMOTE_LABELS.values())),
+            options=[*sorted(set(REMOTE_LABELS.values())), "unknown"],
+            required_state_key="RemoteEnable",
             value_fn=lambda s: REMOTE_LABELS.get(
-                (s.get("RemoteEnable") or [None])[0]  # type: ignore[index]
-            ),
+                (s.get("RemoteEnable") or [None])[0],  # type: ignore[index]
+                "unknown",
+            ) if isinstance((s.get("RemoteEnable") or [None])[0], int) else None,
         ),
     ),
     MieleLanSensorDef(
@@ -387,8 +408,9 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             translation_key="standby_state",
             entity_category=EntityCategory.DIAGNOSTIC,
             device_class=SensorDeviceClass.ENUM,
-            options=list(set(STANDBY_STATE_LABELS.values())),
-            value_fn=lambda s: _enum(s, "StandbyState", STANDBY_STATE_LABELS),
+            options=[*sorted(set(STANDBY_STATE_LABELS.values())), "unknown"],
+            required_state_key="StandbyState",
+            value_fn=lambda s: _enum_option(s, "StandbyState", STANDBY_STATE_LABELS),
         ),
     ),
     MieleLanSensorDef(
@@ -398,6 +420,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             translation_key="process_action",
             entity_category=EntityCategory.DIAGNOSTIC,
             entity_registry_enabled_default=False,
+            required_state_key="ProcessAction",
             value_fn=lambda s: _enum(s, "ProcessAction", PROCESS_ACTION_LABELS),
         ),
     ),
@@ -408,6 +431,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             translation_key="device_action",
             entity_category=EntityCategory.DIAGNOSTIC,
             entity_registry_enabled_default=False,
+            required_state_key="DeviceAction",
             value_fn=lambda s: _enum(s, "DeviceAction", DEVICE_ACTION_LABELS),
         ),
     ),
@@ -419,6 +443,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             translation_key="sync_state",
             entity_category=EntityCategory.DIAGNOSTIC,
             entity_registry_enabled_default=False,
+            required_state_key="SyncState",
             value_fn=lambda s: _enum(s, "SyncState", SYNC_STATE_LABELS),
         ),
     ),
@@ -433,6 +458,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
         description=MieleLanSensorDescription(
             key="drying_step",
             translation_key="drying_step",
+            required_state_key="DryingStep",
             value_fn=_gated_enum("DryingStep", enums.StateDryingStep),
         ),
     ),
@@ -468,8 +494,8 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             entity_category=EntityCategory.DIAGNOSTIC,
             entity_registry_enabled_default=False,
             device_class=SensorDeviceClass.ENUM,
-            options=list(set(PROGRAM_TYPE_LABELS.values())),
-            value_fn=lambda s: _enum(s, "ProgramType", PROGRAM_TYPE_LABELS),
+            options=[*sorted(set(PROGRAM_TYPE_LABELS.values())), "unknown"],
+            value_fn=lambda s: _enum_option(s, "ProgramType", PROGRAM_TYPE_LABELS),
         ),
     ),
     MieleLanSensorDef(
@@ -484,6 +510,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             translation_key="drying_step_raw",
             entity_category=EntityCategory.DIAGNOSTIC,
             entity_registry_enabled_default=False,
+            required_state_key="DryingStep",
             value_fn=lambda s: _enum(s, "DryingStep", enums.StateDryingStep),
         ),
     ),
@@ -577,6 +604,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             translation_key="light_state",
             entity_category=EntityCategory.DIAGNOSTIC,
             entity_registry_enabled_default=False,
+            required_state_key="Light",
             value_fn=lambda s: {0: "not_supported", 1: "on", 2: "off"}.get(s.get("Light")),
         ),
     ),
@@ -633,6 +661,7 @@ class MieleLanWlanSensorDef:
 @dataclass(frozen=True, kw_only=True)
 class MieleLanDop2SensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any]
+    required_dop2_key: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -655,6 +684,7 @@ DOP2_SENSORS: tuple[MieleLanDop2SensorDef, ...] = (
             native_unit_of_measurement=UnitOfTime.HOURS,
             state_class=SensorStateClass.TOTAL_INCREASING,
             entity_category=EntityCategory.DIAGNOSTIC,
+            required_dop2_key="hours_of_operation",
             value_fn=lambda d: (
                 round(v / 60, 1)
                 if (v := (d.get("hours_of_operation") or {}).get("total")) is not None
@@ -855,6 +885,7 @@ async def async_setup_entry(
     for coord in coordinators.values():
         dt = coord.device_type
         temp_zones = _present_temperature_zones(coord)
+        state = coord.data.state if coord.data else {}
         for d in SENSOR_TYPES:
             if dt not in d.types:
                 continue
@@ -865,6 +896,9 @@ async def async_setup_entry(
                 n = int(key.rsplit("_", 1)[1])
                 if n not in temp_zones:
                     continue
+            rsk = d.description.required_state_key
+            if rsk is not None and rsk not in state:
+                continue
             # Switch to a device-type-aware class for program_id / phase.
             # Gated variants → MieleLanProgramSensor (Status-gated).
             # Raw variants → MieleLanProgramRawSensor (always exposes
@@ -882,14 +916,22 @@ async def async_setup_entry(
             if dt in d.types:
                 entities.append(MieleLanWlanSensor(coord, d.description))
         for d in DOP2_SENSORS:
-            if dt in d.types:
-                entities.append(MieleLanDop2Sensor(coord, d.description))
+            if dt not in d.types:
+                continue
+            if not coord.dop2_supported:
+                continue
+            rdk = d.description.required_dop2_key
+            if rdk is not None and rdk not in coord.data.dop2:
+                continue
+            entities.append(MieleLanDop2Sensor(coord, d.description))
         for d in DEVICE_CONTEXT_SENSORS:
             if dt not in d.types:
                 continue
+            if not coord.data.device_context:
+                continue
             ci = d.description.container_index
             if ci is not None:
-                containers = coord.data.device_context.get("dos_containers") if coord.data else None
+                containers = coord.data.device_context.get("dos_containers")
                 if not containers or len(containers) <= ci:
                     continue
             entities.append(MieleLanDeviceContextSensor(coord, d.description))

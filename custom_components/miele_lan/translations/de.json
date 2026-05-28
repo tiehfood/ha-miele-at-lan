@@ -89,6 +89,7 @@
           "supercooling_superfreezing": "SuperCool/SuperFrost",
           "superfreezing": "SuperFrost",
           "superheating": "Superheating",
+          "unknown": "Unbekannt",
           "waiting_to_start": "Warten auf den Start"
         }
       },
@@ -889,7 +890,8 @@
           "cleaning_care_program": "Reinigungs-/Pflegeprogramm",
           "maintenance_program": "Wartungsprogramm",
           "normal_operation_mode": "Normaler Betriebsmodus",
-          "own_program": "Programm"
+          "own_program": "Programm",
+          "unknown": "Unbekannt"
         }
       },
       "remaining_minutes": {
@@ -936,15 +938,18 @@
         "state": {
           "disabled": "Deaktiviert",
           "enabled_but_not_possible": "Aktiv (nicht möglich)",
-          "full": "Aktiv"
+          "full": "Aktiv",
+          "unknown": "Unbekannt"
         }
       },
       "standby_state": {
         "name": "Standby-Status",
         "state": {
-          "not_in_standby": "Aktiv",
+          "deep_standby": "Tiefschlaf",
+          "going_to_standby": "Wechselt in Standby",
           "network_idle": "Netzwerk-Leerlauf",
-          "deep_standby": "Tiefschlaf"
+          "not_in_standby": "Aktiv",
+          "unknown": "Unbekannt"
         }
       },
       "process_action": {

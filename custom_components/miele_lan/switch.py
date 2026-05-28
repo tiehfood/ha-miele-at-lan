@@ -77,6 +77,8 @@ async def async_setup_entry(
     entities = []
     for coord in coordinators.values():
         dt = coord.device_type
+        if not coord.dop2_supported:
+            continue
         for d in SWITCH_TYPES:
             if dt in d.types:
                 entities.append(MieleLanSwitch(coord, d.description))

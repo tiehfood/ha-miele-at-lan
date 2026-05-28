@@ -31,7 +31,7 @@ async def async_setup_entry(
     coordinators: dict[str, MieleLanCoordinator] = bundle["coordinators"]
     entities: list[Any] = []
     for coord in coordinators.values():
-        if coord.device_type in LIGHTABLE_FAMILY:
+        if coord.device_type in LIGHTABLE_FAMILY and "Light" in coord.data.state:
             entities.append(MieleLanLight(coord))
     async_add_entities(entities)
 

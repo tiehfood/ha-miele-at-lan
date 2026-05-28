@@ -32,6 +32,7 @@ from .entity import MieleLanEntity
 @dataclass(frozen=True, kw_only=True)
 class MieleLanButtonDescription(ButtonEntityDescription):
     press_fn: Callable[[MieleLanClient], Awaitable[Any]]
+    requires_dop2: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -46,6 +47,7 @@ BUTTONS: tuple[MieleLanButtonDef, ...] = (
         description=MieleLanButtonDescription(
             key="wake",
             translation_key="wake",
+            requires_dop2=False,
             press_fn=lambda c: c.wake(),
         ),
     ),
@@ -54,7 +56,8 @@ BUTTONS: tuple[MieleLanButtonDef, ...] = (
         description=MieleLanButtonDescription(
             key="stop_program",
             translation_key="stop_program",
-            press_fn=lambda c: c.write_oven_request(OPCODE_STOP),
+            requires_dop2=True,
+            press_fn=lambda c: c.write_user_request(OPCODE_STOP),
         ),
     ),
 )
@@ -71,8 +74,11 @@ async def async_setup_entry(
     for coord in coordinators.values():
         dt = coord.device_type
         for d in BUTTONS:
-            if dt in d.types:
-                entities.append(MieleLanButton(coord, d.description))
+            if dt not in d.types:
+                continue
+            if d.description.requires_dop2 and not coord.dop2_supported:
+                continue
+            entities.append(MieleLanButton(coord, d.description))
     async_add_entities(entities)
 
 
