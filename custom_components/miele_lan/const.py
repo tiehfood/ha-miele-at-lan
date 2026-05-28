@@ -46,9 +46,9 @@ PROCESS_ACTION_START = 1
 PROCESS_ACTION_STOP = 2
 PROCESS_ACTION_PAUSE = 3
 
-# DOP2 oven control leaf (UserRequestOven). See ARCHITECTURE.md.
-OVEN_USER_REQUEST_UNIT = 2
-OVEN_USER_REQUEST_LEAF = 1583
+# DOP2 GLOBAL_USER_REQ leaf — universal across oven, laundry, dishwasher.
+USER_REQUEST_UNIT = 2
+USER_REQUEST_LEAF = 1583
 
 # Opcode → label.  Sourced from MieleDop2Structures.UserRequestOven (akappner/MieleRESTServer)
 # and confirmed alive on H7560BP via DOP2 writes (light, switch on/off).

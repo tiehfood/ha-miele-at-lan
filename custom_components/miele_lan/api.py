@@ -7,7 +7,7 @@ What this module owns
    encrypt time → 403. We sign the padded body.
 2. Action responses come back as JSON lists (e.g. ``[{"Success":{"DeviceAction":0}}]``).
    asyncmiele expects dicts → pydantic error. We unwrap when possible.
-3. Oven UserRequest is **not** the /State ``UserRequest`` field (washer-only,
+3. GLOBAL_USER_REQ is **not** the /State ``UserRequest`` field (washer-only,
    12141/12142). It's a binary write to DOP2 leaf ``2/1583``. We provide it here.
 
 Everything else (crypto helpers, MieleClient class, response decryption) is
@@ -23,6 +23,8 @@ import logging
 from typing import Any
 
 import aiohttp
+
+from homeassistant.exceptions import HomeAssistantError
 
 from asyncmiele import MieleClient
 from asyncmiele.api import client as _client_mod
@@ -44,8 +46,8 @@ from .const import (
     OPCODE_LIGHT_ON,
     OPCODE_SWITCH_OFF,
     OPCODE_SWITCH_ON,
-    OVEN_USER_REQUEST_LEAF,
-    OVEN_USER_REQUEST_UNIT,
+    USER_REQUEST_LEAF,
+    USER_REQUEST_UNIT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -81,8 +83,8 @@ def _pad_request_body(raw: bytes, blocksize: int = 16, json_min: int = 64) -> by
     return raw + b"\x20" * (target - len(raw))
 
 
-def build_oven_request_payload(opcode: int) -> bytes:
-    """Build the 32-byte DOP2 write payload that issues a single UserRequestOven opcode."""
+def build_user_request_payload(opcode: int) -> bytes:
+    """Build the 32-byte DOP2 write payload for a GLOBAL_USER_REQ opcode."""
     if not 0 <= opcode <= 0xFF:
         raise ValueError(f"opcode out of range: {opcode}")
     return _OVEN_REQ_PREFIX + bytes([opcode]) + _OVEN_REQ_SUFFIX
@@ -294,24 +296,40 @@ class MieleLanClient:
         """Wake the appliance from sleep. Returns the device's action ack."""
         return await self._put_state({"DeviceAction": DEVICE_ACTION_WAKE})
 
-    async def write_oven_request(self, opcode: int) -> None:
-        """Send a UserRequestOven opcode via DOP2 leaf 2/1583.
+    async def write_user_request(self, opcode: int) -> None:
+        """Send a GLOBAL_USER_REQ opcode via DOP2 leaf 2/1583.
 
-        Device requires the front-panel "Mobile controllable" setting to be enabled,
-        otherwise it returns HTTP 500.
+        Works across oven, laundry, and dishwasher device classes.
+        The front-panel "Mobile controllable" setting must be on, else the device
+        returns HTTP 500. Some firmwares (e.g. EK057 FW 08.32) block all DOP2
+        writes unconditionally and return HTTP 404.
         """
-        payload = build_oven_request_payload(opcode)
+        payload = build_user_request_payload(opcode)
         resource = (
             f"/Devices/{self._route}/DOP2/"
-            f"{OVEN_USER_REQUEST_UNIT}/{OVEN_USER_REQUEST_LEAF}?idx1=0&idx2=0"
+            f"{USER_REQUEST_UNIT}/{USER_REQUEST_LEAF}?idx1=0&idx2=0"
         )
-        status, _ = await self._client._request_bytes(
-            "PUT", resource, body=payload, allowed_status=(200, 204)
-        )
-        if status not in (200, 204):
-            raise ResponseError(status, f"oven request opcode 0x{opcode:02x} failed")
+        try:
+            await self._client._request_bytes(
+                "PUT", resource, body=payload, allowed_status=(200, 204)
+            )
+        except ResponseError as exc:
+            status = exc.status_code
+            if status == 404:
+                raise HomeAssistantError(
+                    "This appliance's firmware does not accept remote commands "
+                    "over the local API (DOP2 writes are blocked on this hardware/firmware)."
+                ) from exc
+            if status == 500:
+                raise HomeAssistantError(
+                    "Remote control was refused. Enable 'Remote control' / "
+                    "'Mobile controllable' in the appliance's settings menu and try again."
+                ) from exc
+            raise HomeAssistantError(
+                f"Remote command failed (HTTP {status})."
+            ) from exc
 
-    # --- oven-specific convenience -----------------------------------------
+    # --- light / power convenience ------------------------------------------
 
     async def light_on(self) -> None:
         """Turn interior light on via the clean /State JSON API (no DOP2 needed)."""
@@ -322,10 +340,10 @@ class MieleLanClient:
         await self._put_state({"Light": 2})
 
     async def switch_on(self) -> None:
-        await self.write_oven_request(OPCODE_SWITCH_ON)
+        await self.write_user_request(OPCODE_SWITCH_ON)
 
     async def switch_off(self) -> None:
-        await self.write_oven_request(OPCODE_SWITCH_OFF)
+        await self.write_user_request(OPCODE_SWITCH_OFF)
 
     # Cooling-family target-temperature writes are not supported via the LAN
     # protocol — see custom_components/miele_lan/climate.py for the RE notes.
