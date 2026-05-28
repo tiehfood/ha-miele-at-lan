@@ -88,6 +88,7 @@
           "supercooling_superfreezing": "Supercooling/superfreezing",
           "superfreezing": "Superfreezing",
           "superheating": "Superheating",
+          "unknown": "Unknown",
           "waiting_to_start": "Waiting to start"
         }
       },
@@ -888,7 +889,8 @@
           "cleaning_care_program": "Cleaning/care program",
           "maintenance_program": "Maintenance program",
           "normal_operation_mode": "Normal operation mode",
-          "own_program": "Program"
+          "own_program": "Program",
+          "unknown": "Unknown"
         }
       },
       "remaining_minutes": {
@@ -935,15 +937,18 @@
         "state": {
           "disabled": "Disabled",
           "enabled_but_not_possible": "Enabled (not possible)",
-          "full": "Enabled"
+          "full": "Enabled",
+          "unknown": "Unknown"
         }
       },
       "standby_state": {
         "name": "Standby state",
         "state": {
-          "not_in_standby": "Active",
+          "deep_standby": "Deep standby",
+          "going_to_standby": "Going to standby",
           "network_idle": "Network idle",
-          "deep_standby": "Deep standby"
+          "not_in_standby": "Active",
+          "unknown": "Unknown"
         }
       },
       "process_action": {
@@ -988,6 +993,32 @@
       },
       "material_number": {
         "name": "Material number"
+      },
+      "hours_of_operation": {
+        "name": "Hours of operation"
+      },
+      "twindos_1_level": {
+        "name": "TwinDos compartment 1 fill level"
+      },
+      "twindos_2_level": {
+        "name": "TwinDos compartment 2 fill level"
+      },
+      "twindos_1_dosage": {
+        "name": "TwinDos compartment 1 dosage"
+      },
+      "twindos_2_dosage": {
+        "name": "TwinDos compartment 2 dosage"
+      },
+      "wash2dry_state": {
+        "name": "Wash2Dry state",
+        "state": {
+          "not_active": "Not active",
+          "activatable": "Activatable",
+          "active": "Active",
+          "ready_to_receive": "Ready to receive",
+          "program_received": "Program received",
+          "no_program_available": "No program available"
+        }
       },
       "push_mode": {
         "name": "Push status",
