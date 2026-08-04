@@ -38,6 +38,7 @@ CONSUMER_CLIENT_IDS: dict[str, str] = {
     "hr": "HD4OUUQYAw_5DtVFSe4-rYzR",
     "hu": "2mm2yscHPGJ4tJCVjd6mp-to",
     "it": "ARQyaYB0ZxLxJ1SJcjJgctuV",
+    "lt": "KzeuROL469pqvGFjSYp2ivQ2",
     "nl": "7ItTbQXQ1wthDOue9jvBQ7Iz",
     "pl": "jWbgLScpvIuqjUoYvf1jS-Is",
     "pt": "5ZVD-CuJvpG4YpCO9pQhtrGQ",
