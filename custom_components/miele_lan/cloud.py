@@ -28,6 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 # differs per country.
 CONSUMER_CLIENT_IDS: dict[str, str] = {
     "at": "wNv9HJ3ZcFKH4bxvz0LExQuw",
+    "be": "UJgKOxacIul2BcPJAzrQE6p0",
     "ch": "V52nWiniHyVotglJKplSXnX8",
     "cz": "npoAzuJP6okjvJ0NqUq9i5Rv",
     "de": "UJgKOxacIul2BcPJAzrQE6p0",
