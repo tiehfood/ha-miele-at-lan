@@ -1,8 +1,10 @@
 """Tests for the provisioning CLI's key generation + payload shapes.
 
-The CLI lives under `tools/` which is gitignored (RE tooling, not shipped via
-HACS). When running CI on a fresh checkout the module isn't available, so the
-whole module is skipped instead of failing collection.
+`tools/*` is gitignored — the directory holds RE scratch work — but the CLI is
+allowlisted back in, so it is present in a fresh checkout. What is not
+guaranteed is its third-party imports: it needs aiohttp and pyyaml, which the
+integration itself does not, so a checkout without them skips this module
+rather than failing collection.
 """
 
 import re
@@ -17,7 +19,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 prov = pytest.importorskip(
     "miele_lan_provision",
-    reason="tools/miele_lan_provision.py is gitignored; skip when not present locally",
+    reason="miele_lan_provision needs aiohttp + pyyaml; skip where they are absent",
 )
 
 
