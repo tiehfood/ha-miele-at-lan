@@ -234,3 +234,51 @@ async def test_fetch_groupkey_honours_the_lan_group() -> None:
     assert key.group_id == "1111222233334444"
     assert key.group_key == "BBBB"
     assert key.region == "AS"
+
+
+# ------------------------------------------- the household may be on the other
+# backend entirely. Captured from the Miele iOS app on 2026-08-22: an `au`
+# account authenticates against Gigya's au1 data centre but its household lives
+# on rest-eu, while rest-as answers for the same account with an unrelated,
+# empty household. Stopping at the first backend that answers picks the wrong
+# one — which is exactly what happened on the machine this was found on.
+@pytest.mark.asyncio
+async def test_keeps_searching_when_the_first_backend_has_the_wrong_household() -> None:
+    session = _FakeSession({AS_HOST: (200, [STALE]), EU_HOST: (200, [LIVE])})
+    key = await cloud.fetch_groupkey(
+        session, "token", cc="au", prefer_group_ids={"1111222233334444"}
+    )
+    assert key.group_id == "1111222233334444"
+    assert key.region == "EU"
+    assert session.tried == [AS_HOST, EU_HOST]
+
+
+@pytest.mark.asyncio
+async def test_stops_at_the_first_backend_that_matches() -> None:
+    """A match ends the search — no needless call to the other backend."""
+    session = _FakeSession({AS_HOST: (200, [LIVE]), EU_HOST: (200, [LIVE])})
+    key = await cloud.fetch_groupkey(
+        session, "token", cc="au", prefer_group_ids={"1111222233334444"}
+    )
+    assert key.region == "AS"
+    assert session.tried == [AS_HOST]
+
+
+@pytest.mark.asyncio
+async def test_falls_back_to_first_answer_when_nothing_matches() -> None:
+    """HA on an isolated VLAN sees no groups; take what we can get."""
+    session = _FakeSession({AS_HOST: (200, [STALE]), EU_HOST: (200, [STALE])})
+    key = await cloud.fetch_groupkey(
+        session, "token", cc="au", prefer_group_ids={"0000000000000000"}
+    )
+    assert key.group_id == "AAAABBBBCCCCDDDD"
+    assert key.region == "AS"
+    assert session.tried == [AS_HOST, EU_HOST]
+
+
+@pytest.mark.asyncio
+async def test_no_lan_hint_keeps_the_old_first_answer_wins_behaviour() -> None:
+    session = _FakeSession({AS_HOST: (200, [STALE]), EU_HOST: (200, [LIVE])})
+    key = await cloud.fetch_groupkey(session, "token", cc="au")
+    assert key.group_id == "AAAABBBBCCCCDDDD"
+    assert session.tried == [AS_HOST]

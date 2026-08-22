@@ -156,8 +156,10 @@ def region_candidates(cc: str) -> list[str]:
     """REST regions to try, best guess first, for a sales company.
 
     The Gigya data centre named in the MAP authorize redirect is the only signal
-    available, and it does not map to a REST backend by any documented rule — so
-    this is a preference order, not a lookup. Since `/V2/GroupKeyId/` is a plain
+    available, and it demonstrably does NOT map to a REST backend: an `au`
+    account sits in Gigya's au1 data centre while its household lives on
+    rest-eu (captured from the Miele iOS app, 2026-08-22). Treat this purely as
+    which backend to ask first; `fetch_groupkey` must try the others regardless. Since `/V2/GroupKeyId/` is a plain
     GET against one of two hosts, the caller can just try both and keep whichever
     serves the household. That beats maintaining a country -> region table nobody
     can verify for every market, which is what previously limited setup to the EU.
@@ -420,6 +422,9 @@ async def fetch_groupkey(
     never seen without anyone having to hand-maintain a country → region table.
     """
     regions = [region.upper()] if region else region_candidates(cc or "de")
+    wanted = {g.upper() for g in (prefer_group_ids or set())}
+    fallback: GroupKey | None = None
+
     for candidate in regions:
         host = REST_HOST_BY_REGION.get(candidate)
         if not host:
@@ -427,9 +432,36 @@ async def fetch_groupkey(
         groupkey = await _groupkey_from_host(
             session, access_token, host, prefer_group_ids
         )
-        if groupkey:
-            groupkey.region = candidate
+        if not groupkey:
+            continue
+        groupkey.region = candidate
+
+        # Nothing to match against: first backend that answers wins, as before.
+        if not wanted:
             return groupkey
+
+        if groupkey.group_id.upper() in wanted:
+            return groupkey
+
+        # A backend answered, but with a household this LAN knows nothing about.
+        # Keep looking — the other backend may hold the one we actually want.
+        # An `au` account is served by rest-eu despite sitting in Gigya's au1
+        # data centre, and stopping at the first answer picked up an unrelated
+        # empty household from rest-as while the live one sat on rest-eu.
+        _LOGGER.debug(
+            "%s offered household %s, which is not on this LAN — trying the rest",
+            host, groupkey.group_id,
+        )
+        if fallback is None:
+            fallback = groupkey
+
+    if fallback is not None:
+        _LOGGER.warning(
+            "no backend offered a household matching this LAN (%s); falling back "
+            "to %s from %s", sorted(wanted), fallback.group_id, fallback.region,
+        )
+        return fallback
+
     raise RuntimeError(
         f"no household returned by {', '.join(regions)} — the account has no "
         f"paired devices, or its keys live on a backend we did not try"
