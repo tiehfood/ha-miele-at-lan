@@ -430,6 +430,64 @@ class DeviceIpResolver:
         return found_ip
 
 
+async def mdns_household_ids(
+    *,
+    timeout: float = 4.0,
+    zeroconf: Any | None = None,
+) -> set[str]:
+    """Group IDs advertised by `_mieleathome._tcp.local.` services on this LAN.
+
+    The `group=` TXT record needs no credentials to read, unlike
+    `mdns_discover_household()` which signs a GET /Devices and therefore needs
+    the GroupKey already. That makes this usable *before* setup has a key, to
+    tell which household the appliances in front of us actually belong to —
+    the cloud can list several, and only the LAN knows which one is live.
+    """
+    try:
+        from zeroconf import IPVersion, ServiceStateChange
+        from zeroconf.asyncio import AsyncServiceBrowser, AsyncZeroconf
+    except ImportError:
+        _LOGGER.warning("zeroconf not installed — cannot discover Miele appliances")
+        return set()
+
+    groups: set[str] = set()
+    owns_zc = zeroconf is None
+    zc = zeroconf if zeroconf is not None else AsyncZeroconf(ip_version=IPVersion.V4Only)
+    pending: list[asyncio.Task] = []
+
+    async def _resolve(service_type: str, name: str) -> None:
+        info = await zc.async_get_service_info(service_type, name, timeout=2000)
+        if info is None:
+            return
+        props = {
+            (k.decode("ascii", errors="ignore") if isinstance(k, bytes) else k):
+            (v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v)
+            for k, v in (info.properties or {}).items()
+        }
+        group = (props.get("group") or "").upper()
+        if group:
+            groups.add(group)
+
+    def _on_state(zeroconf, service_type, name, state_change):  # type: ignore[no-untyped-def]
+        if state_change is ServiceStateChange.Added:
+            pending.append(asyncio.create_task(_resolve(service_type, name)))
+
+    browser = AsyncServiceBrowser(
+        zc.zeroconf, ["_mieleathome._tcp.local."], handlers=[_on_state]
+    )
+    try:
+        await asyncio.sleep(timeout)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+    finally:
+        await browser.async_cancel()
+        if owns_zc:
+            await zc.async_close()
+
+    _LOGGER.debug("mDNS sees Miele household(s) on this LAN: %s", sorted(groups) or "none")
+    return groups
+
+
 async def mdns_discover_household(
     group_id_hex: str,
     group_key_hex: str,

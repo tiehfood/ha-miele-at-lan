@@ -187,3 +187,50 @@ async def test_no_backend_has_the_household() -> None:
     with pytest.raises(RuntimeError, match="no household"):
         await cloud.fetch_groupkey(session, "token", cc="au")
     assert session.tried == [AS_HOST, EU_HOST]
+
+
+# --------------------------------------------------- multi-household accounts
+STALE = {"groupId": "AAAABBBBCCCCDDDD", "groupKey": "AAAA", "devices": []}
+LIVE = {"groupId": "1111222233334444", "groupKey": "BBBB", "devices": [{"fabNr": "1"}]}
+
+
+def test_lan_group_wins_over_order() -> None:
+    """mDNS is authoritative: the household in front of us is the right one."""
+    picked = cloud._pick_household([STALE, LIVE], {"1111222233334444"})
+    assert picked["groupId"] == "1111222233334444"
+
+
+def test_lan_group_wins_even_when_it_lists_no_devices() -> None:
+    empty_but_live = {"groupId": "1111222233334444", "groupKey": "B", "devices": []}
+    with_devices = {"groupId": "AAAABBBBCCCCDDDD", "groupKey": "A",
+                    "devices": [{"fabNr": "9"}]}
+    picked = cloud._pick_household(
+        [with_devices, empty_but_live], {"1111222233334444"}
+    )
+    assert picked["groupId"] == "1111222233334444"
+
+
+def test_falls_back_to_the_household_with_devices() -> None:
+    """No mDNS answer (HA on another VLAN): an empty household can't be set up."""
+    picked = cloud._pick_household([STALE, LIVE], set())
+    assert picked["groupId"] == "1111222233334444"
+
+
+def test_lan_groups_that_match_nothing_are_ignored() -> None:
+    picked = cloud._pick_household([STALE, LIVE], {"0000000000000000"})
+    assert picked["groupId"] == "1111222233334444"
+
+
+def test_single_household_is_returned_unchanged() -> None:
+    assert cloud._pick_household([STALE], set())["groupId"] == "AAAABBBBCCCCDDDD"
+
+
+@pytest.mark.asyncio
+async def test_fetch_groupkey_honours_the_lan_group() -> None:
+    session = _FakeSession({AS_HOST: (200, [STALE, LIVE])})
+    key = await cloud.fetch_groupkey(
+        session, "token", cc="au", prefer_group_ids={"1111222233334444"}
+    )
+    assert key.group_id == "1111222233334444"
+    assert key.group_key == "BBBB"
+    assert key.region == "AS"

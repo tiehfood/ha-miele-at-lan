@@ -314,8 +314,39 @@ async def refresh_access_token(
     return tokens
 
 
+def _pick_household(
+    groups: list[dict[str, Any]], prefer_group_ids: set[str] | None
+) -> dict[str, Any]:
+    """Choose which household to set up when the cloud returns several.
+
+    The old code took `groups[0]` and called one household per account "normal".
+    It is not: an account that has been re-paired, or had appliances replaced,
+    keeps the retired households, and the stale one can sort first — observed on
+    an `au` account whose first entry had no devices while the live household
+    held three (2026-08-22).
+
+    Preference order:
+      1. a household the LAN is actually advertising — mDNS is the only
+         authoritative answer to "which of these is in front of me"
+      2. one that lists devices, since an empty list cannot be set up
+      3. the first, preserving the previous behaviour
+    """
+    if prefer_group_ids:
+        for g in groups:
+            if (g.get("groupId") or "").upper() in prefer_group_ids:
+                return g
+        _LOGGER.debug(
+            "no cloud household matches the LAN groups %s — falling back",
+            sorted(prefer_group_ids),
+        )
+    return next((g for g in groups if g.get("devices")), groups[0])
+
+
 async def _groupkey_from_host(
-    session: aiohttp.ClientSession, access_token: str, host: str
+    session: aiohttp.ClientSession,
+    access_token: str,
+    host: str,
+    prefer_group_ids: set[str] | None = None,
 ) -> GroupKey | None:
     """One backend's answer to /V2/GroupKeyId/, or None when it holds no household.
 
@@ -354,11 +385,15 @@ async def _groupkey_from_host(
     if not groups:
         _LOGGER.debug("%s knows no household for this token", host)
         return None
-    g = groups[0]  # exactly one household per account in normal use
     _LOGGER.debug(
-        "%s served a household with %d device(s); payload fields: %s",
-        host, len(g.get("devices") or []), sorted(g),
+        "%s served %d household(s): %s",
+        host, len(groups),
+        [
+            (g.get("groupId"), len(g.get("devices") or []))
+            for g in groups
+        ],
     )
+    g = _pick_household(groups, prefer_group_ids)
     return GroupKey(
         group_id=g["groupId"],
         group_key=g["groupKey"],
@@ -371,8 +406,12 @@ async def fetch_groupkey(
     access_token: str,
     region: str | None = None,
     cc: str | None = None,
+    prefer_group_ids: set[str] | None = None,
 ) -> GroupKey:
     """GET /V2/GroupKeyId/ → household key + device list.
+
+    `prefer_group_ids` are the households mDNS can see on this LAN; when the
+    account owns more than one, that is what decides which is the live one.
 
     Pass `region` when it is already known — a configured entry records the one
     that worked. Leave it None and the backends from `region_candidates(cc)` are
@@ -385,7 +424,9 @@ async def fetch_groupkey(
         host = REST_HOST_BY_REGION.get(candidate)
         if not host:
             raise ValueError(f"unknown region {candidate!r}")
-        groupkey = await _groupkey_from_host(session, access_token, host)
+        groupkey = await _groupkey_from_host(
+            session, access_token, host, prefer_group_ids
+        )
         if groupkey:
             groupkey.region = candidate
             return groupkey
@@ -448,6 +489,7 @@ __all__ = [
     "REST_HOST_BY_REGION",
     "GIGYA_DC_BY_COUNTRY",
     "region_candidates",
+    "_pick_household",
     "PKCEChallenge",
     "GroupKey",
     "build_authorize_url",
