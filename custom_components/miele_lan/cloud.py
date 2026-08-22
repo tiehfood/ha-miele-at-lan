@@ -325,6 +325,13 @@ async def _groupkey_from_host(
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Accept": "application/json",
+        # Keep sending this even though the payload carries no localised text.
+        # Dropping it made both backends answer HTTP 500 for an `au` account
+        # (2026-08-22), so something server-side wants a locale present. The
+        # value itself appears not to matter, only that there is one — leave it
+        # at the value the EU-only builds shipped rather than inventing a
+        # per-country locale we cannot test.
+        "Accept-Language": "de-DE",
         "User-Agent": "Miele@LAN/0.3 (Home Assistant)",
     }
     async with session.get(
@@ -338,7 +345,10 @@ async def _groupkey_from_host(
                 f"GroupKeyId returned 403 — token likely missing `mcs` scope. body={body}"
             )
         if r.status != 200:
-            _LOGGER.debug("%s answered HTTP %s for /V2/GroupKeyId/", host, r.status)
+            _LOGGER.debug(
+                "%s answered HTTP %s for /V2/GroupKeyId/: %s",
+                host, r.status, (await r.text())[:300],
+            )
             return None
         groups = await r.json(content_type=None)
     if not groups:
@@ -406,6 +416,7 @@ async def fetch_pairing_tan(
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Accept": "application/json",
+        "Accept-Language": "de-DE",  # see _groupkey_from_host
         "User-Agent": "Miele@LAN/0.3 (Home Assistant)",
     }
     async with session.get(
