@@ -203,7 +203,7 @@ async def _fetch_cloud_tan(tokens_path: Path) -> str:
             try: tokens_path.chmod(0o600)
             except Exception: pass
             print(f"  (refresh_token rotated; saved → {tokens_path})")
-        return await fetch_pairing_tan(session, access_token, region="EU")
+        return await fetch_pairing_tan(session, access_token, cc=cc)
 
 
 async def _send_tan_to_appliance(

@@ -23,28 +23,117 @@ import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 
-# Per-country MAP consumer client_ids (extracted from official Android APK).
-# Same Gigya tenant `4_j_ZiR1Ejz2QKP4NFcYnOZw` is shared; only the MAP wrapper
-# differs per country.
+# Per-country MAP consumer client_ids. Regenerate with
+# `python tools/dump_map_countries.py`: Miele's MAP gateway serves these itself
+# over an unauthenticated redirect, so they no longer have to be lifted out of
+# the Android APK. The 18 countries that were originally APK-extracted reproduce
+# byte-for-byte through that probe, which is what pins the two sources together.
+# (The old note here claimed every country shares one Gigya tenant — it does not:
+# each sales company has its own tenant, in one of three Gigya data centres.)
 CONSUMER_CLIENT_IDS: dict[str, str] = {
+    "ae": "iaXIbUAGv6QTUd8FRNPG5fHN",
     "at": "wNv9HJ3ZcFKH4bxvz0LExQuw",
+    "au": "rLXHMAq2VdnICd0eHuefA50w",
+    "be": "JFDW4KGg_ppC3kmSOITHNKBp",
+    "bg": "v6R8ClqnHRWVYJBlhxah0fiR",
+    "br": "zu0ZoLtw2HUj5GH_I_nHfQxM",
+    "ca": "-fZUlMeq5FaRsG5UNgtMpr-e",
     "ch": "V52nWiniHyVotglJKplSXnX8",
+    "cl": "_BRdHKYtaYRpqk7j67y1mc4W",
+    "cn": "_4vxrtrxGJeUNaBd4zTkeSZ2",
+    "cy": "9se3MtP42BbyWUIQBaE9c8NE",
     "cz": "npoAzuJP6okjvJ0NqUq9i5Rv",
     "de": "UJgKOxacIul2BcPJAzrQE6p0",
     "dk": "xWgykqRQSa9THqOXWfzZbxsH",
+    "ee": "m_4y2qk8ntJbOqu6kx7PYXOB",
     "es": "D0Q4NPBR9dwP2EjX4E0_CtHE",
+    "fi": "8JbG7QQsdvEMsYisC_nUfltr",
     "fr": "SOiiE3R4tSD0VxYYBvB8Pi_J",
     "gb": "WigtLzKGJE1Wg6yeZUECV8-P",
+    "gr": "meyCOw7Co2ICAx5ZCMb21oiE",
+    "hk": "tfbB9jidNn1ahn3_oiTrv8um",
     "hr": "HD4OUUQYAw_5DtVFSe4-rYzR",
     "hu": "2mm2yscHPGJ4tJCVjd6mp-to",
+    "ie": "_UU4TA2Iei5eEf0XkYp3ZRKF",
+    "in": "5KwIy81GoVqNkxkB20OtTNaf",
     "it": "ARQyaYB0ZxLxJ1SJcjJgctuV",
+    "jp": "wk4iaS04nYkN4seEsZbKQ2xB",
+    "kr": "_e5CgRBpM9h9ecVoUhpZl9-h",
+    "lt": "KzeuROL469pqvGFjSYp2ivQ2",
+    "lu": "34UAt-gA9ADx2DWgBbtoQh6X",
+    "lv": "MJhu3mAsyk7Tahso0i_7m1ud",
+    "mx": "G_FW4x4rXuwJ6v2VFx2REn34",
+    "my": "esJDemY095qO2Os6VPhAtky0",
     "nl": "7ItTbQXQ1wthDOue9jvBQ7Iz",
+    "no": "411mmVRPOnTNmViGl5aDc5h8",
+    "nz": "RtYo_k74PpIFsLBsrcRk9238",
     "pl": "jWbgLScpvIuqjUoYvf1jS-Is",
     "pt": "5ZVD-CuJvpG4YpCO9pQhtrGQ",
+    "ro": "AQJyFJC8kgsHvKnC2druvJn1",
+    "rs": "qbkOxTdY-dx-0AswysR75wU-",
     "se": "3Mm7m1gD1eU_sUh8yxmShL6S",
+    "sg": "x798Jlx93o8YAL3Lg0dDwdzU",
     "si": "UTyhG21RchpI8FPbNeb1vFg1",
     "sk": "pGeafLwcC1_BCLr8DRTCVxSt",
+    "th": "kY1LYjhV5Wy8L3Jxe9rh_vYr",
+    "tr": "ZSHeNOPc9DcFfqNY42LQAIdl",
+    "ua": "bDsz9awSMOt-631KZK2J7dUg",
     "us": "HpsWh2gzgKqRBduPpkZ4Yui9",
+    "za": "A0sngQGYP8ZvfZ100eJGZD4M",
+}
+
+# Country -> Gigya data centre backing that sales company, from the same probe.
+# Used only to order the REST backends in `region_candidates()`.
+GIGYA_DC_BY_COUNTRY: dict[str, str] = {
+    "ae": "eu1",
+    "at": "eu1",
+    "au": "au1",
+    "be": "eu1",
+    "bg": "eu1",
+    "br": "us1",
+    "ca": "us1",
+    "ch": "eu1",
+    "cl": "us1",
+    "cn": "eu1",
+    "cy": "eu1",
+    "cz": "eu1",
+    "de": "eu1",
+    "dk": "eu1",
+    "ee": "eu1",
+    "es": "eu1",
+    "fi": "eu1",
+    "fr": "eu1",
+    "gb": "eu1",
+    "gr": "eu1",
+    "hk": "us1",
+    "hr": "eu1",
+    "hu": "eu1",
+    "ie": "eu1",
+    "in": "eu1",
+    "it": "eu1",
+    "jp": "us1",
+    "kr": "us1",
+    "lt": "eu1",
+    "lu": "eu1",
+    "lv": "eu1",
+    "mx": "us1",
+    "my": "au1",
+    "nl": "eu1",
+    "no": "eu1",
+    "nz": "au1",
+    "pl": "eu1",
+    "pt": "eu1",
+    "ro": "eu1",
+    "rs": "eu1",
+    "se": "eu1",
+    "sg": "au1",
+    "si": "eu1",
+    "sk": "eu1",
+    "th": "au1",
+    "tr": "eu1",
+    "ua": "eu1",
+    "us": "us1",
+    "za": "eu1",
 }
 
 REDIRECT_URI = "miele://oauth2-code/"
@@ -57,6 +146,24 @@ REST_HOST_BY_REGION: dict[str, str] = {
     "AS": "rest-as.domestic.miele-iot.com",
     "EU2": "rest-eu2.domestic.miele-iot.com",
 }
+
+# Only two backends sit behind those names: `rest-eu` and `rest-eu2` resolve to one
+# address, `rest-as` and `rest-as2` to another (checked 2026-08-22). That is why a
+# wrong first guess is cheap to recover from — see `region_candidates()`.
+
+
+def region_candidates(cc: str) -> list[str]:
+    """REST regions to try, best guess first, for a sales company.
+
+    The Gigya data centre named in the MAP authorize redirect is the only signal
+    available, and it does not map to a REST backend by any documented rule — so
+    this is a preference order, not a lookup. Since `/V2/GroupKeyId/` is a plain
+    GET against one of two hosts, the caller can just try both and keep whichever
+    serves the household. That beats maintaining a country -> region table nobody
+    can verify for every market, which is what previously limited setup to the EU.
+    """
+    dc = GIGYA_DC_BY_COUNTRY.get(cc.lower(), "eu1")
+    return ["AS", "EU"] if dc == "au1" else ["EU", "AS"]
 
 
 def _b64url(b: bytes) -> str:
@@ -82,6 +189,7 @@ class GroupKey:
     group_id: str
     group_key: str
     devices: list[dict[str, Any]]
+    region: str = ""  # REST backend that answered — persist to skip the search later
 
 
 def build_authorize_url(cc: str) -> tuple[str, PKCEChallenge]:
@@ -206,22 +314,17 @@ async def refresh_access_token(
     return tokens
 
 
-async def fetch_groupkey(
-    session: aiohttp.ClientSession,
-    access_token: str,
-    region: str = "EU",
-) -> GroupKey:
-    """GET /V2/GroupKeyId/ → household key + device list.
+async def _groupkey_from_host(
+    session: aiohttp.ClientSession, access_token: str, host: str
+) -> GroupKey | None:
+    """One backend's answer to /V2/GroupKeyId/, or None when it holds no household.
 
-    `region` derives from the sales company. EU covers DE/AT/CH/etc.
+    Raises on 403: that means the token is missing the `mcs` scope, which is a
+    token problem rather than a wrong-backend one, so the other host cannot help.
     """
-    host = REST_HOST_BY_REGION.get(region.upper())
-    if not host:
-        raise ValueError(f"unknown region {region!r}")
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Accept": "application/json",
-        "Accept-Language": "de-DE",
         "User-Agent": "Miele@LAN/0.3 (Home Assistant)",
     }
     async with session.get(
@@ -234,10 +337,13 @@ async def fetch_groupkey(
             raise RuntimeError(
                 f"GroupKeyId returned 403 — token likely missing `mcs` scope. body={body}"
             )
-        r.raise_for_status()
+        if r.status != 200:
+            _LOGGER.debug("%s answered HTTP %s for /V2/GroupKeyId/", host, r.status)
+            return None
         groups = await r.json(content_type=None)
     if not groups:
-        raise RuntimeError("no household returned — account has no paired devices?")
+        _LOGGER.debug("%s knows no household for this token", host)
+        return None
     g = groups[0]  # exactly one household per account in normal use
     return GroupKey(
         group_id=g["groupId"],
@@ -246,10 +352,40 @@ async def fetch_groupkey(
     )
 
 
+async def fetch_groupkey(
+    session: aiohttp.ClientSession,
+    access_token: str,
+    region: str | None = None,
+    cc: str | None = None,
+) -> GroupKey:
+    """GET /V2/GroupKeyId/ → household key + device list.
+
+    Pass `region` when it is already known — a configured entry records the one
+    that worked. Leave it None and the backends from `region_candidates(cc)` are
+    tried in order until one returns a household; the winner comes back on
+    `GroupKey.region`, so setup works for a sales company whose backend we have
+    never seen without anyone having to hand-maintain a country → region table.
+    """
+    regions = [region.upper()] if region else region_candidates(cc or "de")
+    for candidate in regions:
+        host = REST_HOST_BY_REGION.get(candidate)
+        if not host:
+            raise ValueError(f"unknown region {candidate!r}")
+        groupkey = await _groupkey_from_host(session, access_token, host)
+        if groupkey:
+            groupkey.region = candidate
+            return groupkey
+    raise RuntimeError(
+        f"no household returned by {', '.join(regions)} — the account has no "
+        f"paired devices, or its keys live on a backend we did not try"
+    )
+
+
 async def fetch_pairing_tan(
     session: aiohttp.ClientSession,
     access_token: str,
-    region: str = "EU",
+    region: str | None = None,
+    cc: str | None = None,
 ) -> str:
     """GET /V2/TAN/ → cloud-issued one-shot TAN for the next commissioning.
 
@@ -261,13 +397,15 @@ async def fetch_pairing_tan(
 
     Returns the bare TAN string from the `Tan` field. Raises on non-200.
     """
-    host = REST_HOST_BY_REGION.get(region.upper())
+    # Unlike GroupKeyId this issues a one-shot TAN, so it must not be probed
+    # across backends — take the caller's region, or the best guess for `cc`.
+    region = (region or region_candidates(cc or "de")[0]).upper()
+    host = REST_HOST_BY_REGION.get(region)
     if not host:
         raise ValueError(f"unknown region {region!r}")
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Accept": "application/json",
-        "Accept-Language": "de-DE",
         "User-Agent": "Miele@LAN/0.3 (Home Assistant)",
     }
     async with session.get(
@@ -293,6 +431,8 @@ __all__ = [
     "REDIRECT_URI",
     "OAUTH_SCOPE",
     "REST_HOST_BY_REGION",
+    "GIGYA_DC_BY_COUNTRY",
+    "region_candidates",
     "PKCEChallenge",
     "GroupKey",
     "build_authorize_url",

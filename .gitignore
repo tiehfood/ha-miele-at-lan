@@ -1,9 +1,11 @@
 # --- Claude / development context ---
 .claude/
 # tools/ is gitignored — the directory contents are RE scratchpads. The
-# only public-facing helper is the provisioning CLI referenced from README.
+# only public-facing helpers are the provisioning CLI referenced from README
+# and the MAP country-table generator that cloud.py's tables are derived from.
 tools/*
 !tools/miele_lan_provision.py
+!tools/dump_map_countries.py
 .idea/
 *.iml
 

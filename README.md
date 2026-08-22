@@ -63,11 +63,30 @@ Copy `custom_components/miele_lan/` into your HA config (final path: `<config>/c
 
 **Settings → Devices & services → Add Integration → Miele@LAN.** Three setup paths:
 
-- **Cloud pairing (recommended).** Log in once with your Miele account; HA fetches the household `GroupKey` from `rest-eu.domestic.miele-iot.com`, mDNS-discovers every appliance, and provisions a SuperVision push listener. The Miele app continues to work in parallel.
+- **Cloud pairing (recommended).** Log in once with your Miele account; HA fetches the household `GroupKey` from Miele's cloud, mDNS-discovers every appliance, and provisions a SuperVision push listener. The Miele app continues to work in parallel. Pick the country your Miele *account* is registered with — that is the sales company, not necessarily where you live now; HA works out which regional backend holds your household on its own.
 - **Paste pre-obtained tokens.** Skip the in-flow OAuth if you already have an `access_token` + `refresh_token` from a Miele OAuth flow against `prod.map.miele-iot.com` (e.g. captured during the Cloud-pairing step in another HA instance).
-- **Paste household credentials.** If you've already extracted `GroupID` + `GroupKey` (e.g. from `MieleRESTServer`), paste them directly — no cloud round-trip needed.
+- **Paste household credentials.** If you've already extracted `GroupID` + `GroupKey` (e.g. from `MieleRESTServer`), paste them directly — no cloud round-trip needed. This path never touches the cloud, so it works regardless of which country your account belongs to.
 
 For factory-fresh appliances, run `python tools/miele_lan_provision.py` on your laptop first to commission them — this writes a new `GroupID`/`GroupKey` and binds the appliance to your LAN.
+
+### Supported countries (cloud pairing)
+
+Cloud pairing works for every sales company Miele's MAP gateway serves — 49 at the time of
+writing, covering Europe, the Americas, and Asia-Pacific:
+
+```
+ae at au be bg br ca ch cl cn cy cz de dk ee es fi fr gb gr hk hr hu ie in it jp kr
+lt lu lv mx my nl no nz pl pt ro rs se sg si sk th tr ua us za
+```
+
+Regenerate the table against the live gateway with:
+
+```sh
+python tools/dump_map_countries.py --check    # exits non-zero if Miele changed anything
+```
+
+If your country is genuinely absent, use **Paste household credentials** instead — that path
+is region-independent.
 
 ### Capturing the OAuth redirect (Cloud pairing)
 

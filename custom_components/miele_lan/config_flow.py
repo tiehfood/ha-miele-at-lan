@@ -152,12 +152,10 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             refresh = tokens.get("refresh_token")
             if not access or not refresh:
                 return self.async_abort(reason="oauth_failed")
-            # Region from country code (very simple mapping — extend later).
-            region = "EU"
-            if self._challenge.cc in ("us",):
-                region = "EU2"  # placeholder; real US region TBD
             try:
-                groupkey = await fetch_groupkey(session, access, region=region)
+                # No region argument: let fetch_groupkey find the backend that
+                # actually holds this household, and record what it settled on.
+                groupkey = await fetch_groupkey(session, access, cc=self._challenge.cc)
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning("GroupKey fetch failed: %s", err)
                 return self.async_abort(reason="groupkey_failed")
@@ -169,7 +167,7 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data={
                 "flow_kind": "cloud",
                 CONF_COUNTRY: self._challenge.cc,
-                CONF_REGION: region,
+                CONF_REGION: groupkey.region,
                 CONF_REFRESH_TOKEN: refresh,
                 CONF_GROUP_ID: groupkey.group_id,
                 CONF_GROUP_KEY: groupkey.group_key,
@@ -194,12 +192,9 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not access or not refresh:
                 errors["base"] = "invalid_token"
             else:
-                region = "EU"
-                if cc == "us":
-                    region = "EU2"
                 async with aiohttp.ClientSession() as session:
                     try:
-                        groupkey = await fetch_groupkey(session, access, region=region)
+                        groupkey = await fetch_groupkey(session, access, cc=cc)
                     except Exception as err:  # noqa: BLE001
                         _LOGGER.warning("GroupKey fetch failed: %s", err)
                         return self.async_abort(reason="groupkey_failed")
@@ -210,7 +205,7 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         "flow_kind": "cloud",
                         CONF_COUNTRY: cc,
-                        CONF_REGION: region,
+                        CONF_REGION: groupkey.region,
                         CONF_REFRESH_TOKEN: refresh,
                         CONF_GROUP_ID: groupkey.group_id,
                         CONF_GROUP_KEY: groupkey.group_key,

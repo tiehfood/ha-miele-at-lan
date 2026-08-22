@@ -1,5 +1,4 @@
 {
   "name": "Miele@LAN",
-  "render_readme": true,
-  "country": ["DE", "AT", "CH"]
+  "render_readme": true
 }
