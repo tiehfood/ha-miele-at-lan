@@ -122,6 +122,8 @@ dns-sd -B _mieleathome._tcp local.
 
 If nothing appears, your network is dropping the multicast — fix that before going further. Common culprits: IGMP-snooping on a managed switch with no IGMP querier, a VLAN ACL between HA and the appliance subnet, an mDNS-blocking firewall rule, or HA running in a Docker bridge (use `network_mode: host`).
 
+**Setup fails with "household … has no appliances"?** Check the log for a second line naming a *different* household. Miele's cloud only hands over the key for the household your account currently owns; if your appliances were commissioned into an earlier one — an app reinstall or a re-pair can do this — the two no longer match, and the cloud's household comes back empty. The Miele app keeps working because it holds the LAN key itself. Fix it by re-pairing the appliances in the Miele app so they join the current household, or by using **Paste household credentials** if you can obtain the GroupKey for the group the appliances actually advertise. If instead the log says no Miele appliance answered mDNS *at all*, it is a network problem — see above.
+
 **Push not firing (sensors only update every 30 s)?** Verify `Mobile Controllable` is on at the appliance, and that HA's listener port (default 18082) is reachable from the appliance subnet. Look for `push:active` in the diagnostic Push State sensor.
 
 **`HTTP error 403` on writes?** The appliance's `RemoteEnable` flag for `MobileCtrl` is `0`. Enable Mobile Controllable on the panel. Fridges, freezers, and wine cabinets stay 403 by firmware design — see Limitations.

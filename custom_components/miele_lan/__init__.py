@@ -44,6 +44,7 @@ from .enrollment import (
     cleanup_stale_subscriptions,
     enroll_all,
     mdns_discover_household,
+    mdns_household_ids,
 )
 from .push_listener import (
     MielePushListener,
@@ -148,12 +149,31 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Only now is this fatal: neither source knows of an appliance. Bailing
         # before the mDNS browse (as this used to) made the fallback above dead
         # code, since it is reachable only when the cloud list is empty.
-        _LOGGER.warning(
-            "household %s has no appliances — the cloud listed none and none "
-            "answered mDNS on this LAN. Check HA shares a broadcast domain "
-            "with the appliances (see the mDNS notes in the README).",
-            group_id,
-        )
+        #
+        # Distinguish "no Miele appliances here" from "appliances here, but in a
+        # different household". They look identical in the log otherwise, and
+        # the second one sends people hunting for an mDNS fault they don't have.
+        lan_groups = await mdns_household_ids(timeout=4.0, zeroconf=shared_zc)
+        others = sorted(lan_groups - {group_id.upper()})
+        if others:
+            _LOGGER.error(
+                "household %s has no appliances, but this LAN has Miele "
+                "appliance(s) in household %s. Your appliances are commissioned "
+                "into a group your Miele account does not currently own, so the "
+                "cloud cannot hand over its key. Re-pair them in the Miele app "
+                "so they join the account's current household, or set the "
+                "integration up with 'Paste household credentials' if you can "
+                "obtain the GroupKey for %s.",
+                group_id, ", ".join(others), others[0],
+            )
+        else:
+            _LOGGER.warning(
+                "household %s has no appliances — the cloud listed none and no "
+                "Miele appliance answered mDNS on this LAN at all. Check HA "
+                "shares a broadcast domain with the appliances (see the mDNS "
+                "notes in the README).",
+                group_id,
+            )
         return False
 
     # Step 2: bring up the push listener (uses the same shared zeroconf).
