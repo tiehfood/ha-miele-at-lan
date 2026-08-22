@@ -94,10 +94,6 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # now).
     static_ips: dict[str, str] = entry.data.get(CONF_STATIC_IPS) or {}
 
-    if not devices:
-        _LOGGER.warning("cloud entry has no devices — nothing to set up")
-        return False
-
     # HA's LAN-facing IP on the interface that routes toward the appliances.
     # If we know any appliance IP, route toward it (multi-homed boxes pick the
     # right interface). Otherwise just toward a public IP.
@@ -135,11 +131,30 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                      len(mdns_static), mdns_static)
     merged_static_ips = {**static_ips, **mdns_static}
     if not devices and mdns_results:
+        # The cloud can return a household with an empty device list — observed
+        # on an `au` account whose appliances the Miele app shows fine. mDNS is
+        # authoritative for what is actually on the LAN, so adopt what it found.
+        _LOGGER.info(
+            "cloud listed no devices; adopting the %d appliance(s) mDNS found",
+            len(mdns_results),
+        )
         devices = [
             {"fabNr": r["fabNr"], "deviceType": r.get("deviceType", 0),
              "deviceName": ""}
             for r in mdns_results
         ]
+
+    if not devices:
+        # Only now is this fatal: neither source knows of an appliance. Bailing
+        # before the mDNS browse (as this used to) made the fallback above dead
+        # code, since it is reachable only when the cloud list is empty.
+        _LOGGER.warning(
+            "household %s has no appliances — the cloud listed none and none "
+            "answered mDNS on this LAN. Check HA shares a broadcast domain "
+            "with the appliances (see the mDNS notes in the README).",
+            group_id,
+        )
+        return False
 
     # Step 2: bring up the push listener (uses the same shared zeroconf).
     async def _on_push(event: PushEvent) -> None:

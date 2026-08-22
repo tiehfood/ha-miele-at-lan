@@ -355,6 +355,10 @@ async def _groupkey_from_host(
         _LOGGER.debug("%s knows no household for this token", host)
         return None
     g = groups[0]  # exactly one household per account in normal use
+    _LOGGER.debug(
+        "%s served a household with %d device(s); payload fields: %s",
+        host, len(g.get("devices") or []), sorted(g),
+    )
     return GroupKey(
         group_id=g["groupId"],
         group_key=g["groupKey"],
