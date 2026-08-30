@@ -74,6 +74,9 @@
       "freeform": {
         "title": "Miele@LAN — static IPs",
         "description": "Only needed if your network blocks mDNS/multicast between Home Assistant and the appliances (VLANs, IGMP snooping, an access point that filters mDNS). This household has no known appliances yet, so list them manually below.",
+        "data": {
+          "static_ips_text": "Static IP addresses"
+        },
         "data_description": {
           "static_ips_text": "One `fabNr=IP` pair per line, e.g. `000000000000=192.0.2.1`. Leave a line out to fall back to automatic discovery for that appliance."
         }
