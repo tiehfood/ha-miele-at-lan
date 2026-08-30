@@ -918,7 +918,7 @@ async def async_setup_entry(
         for d in DOP2_SENSORS:
             if dt not in d.types:
                 continue
-            if not coord.dop2_supported:
+            if not coord.hours_of_operation_supported:
                 continue
             rdk = d.description.required_dop2_key
             if rdk is not None and rdk not in coord.data.dop2:

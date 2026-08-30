@@ -78,7 +78,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         self._data = MieleLanData()
         self._ident_loaded = False
         self._dop2_last_fetch: float = 0.0
-        self._dop2_unsupported = False
+        self._hours_unsupported = False
         self._wlan_last_fetch: float = 0.0
         self._device_context_last_fetch: float = 0.0
         self._device_context_unsupported: bool = False
@@ -108,8 +108,15 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         return MieleAppliance.UNKNOWN
 
     @property
-    def dop2_supported(self) -> bool:
-        return not self._dop2_unsupported
+    def hours_of_operation_supported(self) -> bool:
+        """Whether DOP2 leaf 2/119 (HoursOfOperation) answered 200 at least once.
+
+        This is a read-only statistics leaf and says nothing about whether
+        DOP2 *writes* (leaf 2/1583 — power, stop-program, etc.) work on this
+        appliance. The two are independent capabilities; do not use this flag
+        to gate control entities.
+        """
+        return not self._hours_unsupported
 
     # --------- diagnostic helpers (used by the diagnostic sensor) ---------
     @property
@@ -151,7 +158,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 self._data.ident = await self._fetch_full_ident()
                 self._ident_loaded = True
             await self._maybe_refresh_wlan()
-            await self._maybe_refresh_dop2()
+            await self._maybe_refresh_hours_of_operation()
             await self._maybe_refresh_device_context()
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(str(err)) from err
@@ -172,16 +179,22 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
             self._data.wlan = result
             self._wlan_last_fetch = now
 
-    async def _maybe_refresh_dop2(self) -> None:
-        """Refresh DOP2-sourced diagnostics for device types that expose them.
+    async def _maybe_refresh_hours_of_operation(self) -> None:
+        """Refresh the HoursOfOperation statistics leaf (DOP2 2/119) for ovens.
 
-        Today: HoursOfOperation (leaf 2/119) for ovens. The leaf only updates
-        when a program runs, so we throttle to DOP2_REFRESH_INTERVAL — much
-        slower than the /State poll. Some appliances (and many cloud-only
-        commissionings) return 404 here; we latch off after the first miss to
-        avoid a steady noise of failures in the log.
+        This is a read-only stats probe, unrelated to whether DOP2 *writes*
+        (power, stop-program — leaf 2/1583) work on this device; it must
+        never be used to gate control-entity creation.
+
+        The leaf only updates when a program runs, so we throttle to
+        DOP2_REFRESH_INTERVAL — much slower than the /State poll. A 403/404
+        is a genuine "this firmware doesn't expose this leaf" signal, so we
+        latch off after the first one to avoid steady log noise. Any other
+        failure (timeouts, 500s — seen on some FW 09.14 units) is treated as
+        transient and retried next cycle rather than latched, since it says
+        nothing about whether the leaf is actually supported.
         """
-        if self._dop2_unsupported:
+        if self._hours_unsupported:
             return
         if self.device_type not in OVEN_FAMILY:
             return
@@ -195,12 +208,12 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 allowed_status=(200, 403, 404),
             )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("[%s] DOP2 2/119 fetch failed: %s", self.fab, err)
+            _LOGGER.debug("[%s] DOP2 2/119 fetch failed (transient, will retry): %s", self.fab, err)
             return
         if st != 200:
-            self._dop2_unsupported = True
+            self._hours_unsupported = True
             _LOGGER.debug(
-                "[%s] DOP2 2/119 returned %d — disabling DOP2 reads on this device",
+                "[%s] DOP2 2/119 returned %d — disabling hours-of-operation reads on this device",
                 self.fab, st,
             )
             return
