@@ -53,7 +53,7 @@ MIELE_CONTENT_TYPE = "application/vnd.miele.v1+json; charset=utf-8"
 class PushEvent:
     """One decoded SuperVision push from a peer appliance."""
 
-    peer_fab: str                 # the device that pushed (e.g. "000192453012")
+    peer_fab: str                 # the device that pushed (e.g. "000000000000")
     resource: str                 # "/State/", "/State/Light/", "/State/Status/", "/Ident/"
     content: dict[str, Any]       # decoded JSON payload (the "Content" field)
     host_name: str | None         # mDNS hostname the peer advertised in its push body

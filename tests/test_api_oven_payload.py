@@ -55,7 +55,7 @@ def test_state_pad_alignment_round_trip() -> None:
     from custom_components.miele_lan.api import _pad_request_body
 
     for raw in (b'{"Light":1}', b'{"DeviceAction":2}',
-                b'{"Resource":"/Devices/000192453012/State/","Callback":"http://192.168.33.53:8765/event"}'):
+                b'{"Resource":"/Devices/000000000000/State/","Callback":"http://192.0.2.1:8765/event"}'):
         out = _pad_request_body(raw)
         assert len(out) % 16 == 0
         assert out.endswith(b"}")

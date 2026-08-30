@@ -275,7 +275,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
             )
             return
         # Resource as parsed from the encrypted body is the *peer's own* path
-        # (e.g. "/Devices/000192453012/State/"), not the dispatch-side suffix.
+        # (e.g. "/Devices/000000000000/State/"), not the dispatch-side suffix.
         # Classify by substring rather than prefix.
         merged = False
         res = event.resource or ""
