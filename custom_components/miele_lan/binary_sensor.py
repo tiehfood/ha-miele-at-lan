@@ -125,13 +125,17 @@ BINARY_SENSOR_TYPES: tuple[MieleLanBinarySensorDef, ...] = (
             is_on_fn=lambda s: s.get("Status") == 5,
         ),
     ),
-    # Mobile-start enabled (RemoteEnable[0] == 15) — devices that can be remote-started
+    # /State RemoteEnable is [fullRemoteControl, smartGrid, mobileStart] — the
+    # same triple, in the same order, that the cloud API exposes as
+    # remoteEnable.{fullRemoteControl,smartGrid,mobileStart}. Verified against a
+    # live WER875 reporting [15, 1, 0] while the cloud reported
+    # fullRemoteControl=on, smartGrid=on, mobileStart=off.
     MieleLanBinarySensorDef(
         types=CYCLE_FAMILY,
         description=MieleLanBinarySensorDescription(
             key="mobile_start",
             translation_key="mobile_start",
-            is_on_fn=lambda s: (s.get("RemoteEnable") or [0])[0] == 15,  # type: ignore[index]
+            is_on_fn=lambda s: bool((s.get("RemoteEnable") or [0, 0, 0])[2]),  # type: ignore[index]
         ),
     ),
     # SuperCool — fridges. Read-only on LAN by firmware policy on K7000
