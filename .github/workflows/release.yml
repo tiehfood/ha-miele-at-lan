@@ -14,6 +14,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Compute the next version and print the notes without releasing"
+        type: boolean
+        default: false
 
 # Never run two releases on the same branch concurrently.
 concurrency:
@@ -54,13 +59,20 @@ jobs:
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          npx --yes
-          --package semantic-release@25.0.9
-          --package @semantic-release/exec@7.1.0
-          --package @semantic-release/git@10.0.1
-          --package conventional-changelog-conventionalcommits@10.3.0
-          semantic-release
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          # --dry-run prints the notes it would publish and writes nothing, so the
+          # notes template can be verified from any branch before it ships.
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then
+            args="--dry-run --branches ${GITHUB_REF_NAME}"
+          fi
+          npx --yes \
+            --package semantic-release@25.0.9 \
+            --package @semantic-release/exec@7.1.0 \
+            --package @semantic-release/git@10.0.1 \
+            --package conventional-changelog-conventionalcommits@10.3.0 \
+            semantic-release $args
 
       # semantic-release writes release.env only when it actually published.
       - name: Credit contributors in the release notes

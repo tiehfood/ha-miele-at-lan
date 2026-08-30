@@ -1,5 +1,7 @@
 {
-  "branches": ["main"],
+  "branches": [
+    "main"
+  ],
   "tagFormat": "v${version}",
   "plugins": [
     [
@@ -11,21 +13,7 @@
     [
       "@semantic-release/release-notes-generator",
       {
-        "preset": "conventionalcommits",
-        "presetConfig": {
-          "types": [
-            { "type": "feat", "section": "Features" },
-            { "type": "fix", "section": "Bug Fixes" },
-            { "type": "perf", "section": "Performance" },
-            { "type": "revert", "section": "Reverts" },
-            { "type": "refactor", "section": "Refactoring" },
-            { "type": "ci", "section": "Build & CI" },
-            { "type": "docs", "section": "Documentation" },
-            { "type": "chore", "hidden": true },
-            { "type": "test", "hidden": true },
-            { "type": "style", "hidden": true }
-          ]
-        }
+        "preset": "conventionalcommits"
       }
     ],
     [
@@ -38,7 +26,9 @@
     [
       "@semantic-release/git",
       {
-        "assets": ["custom_components/miele_lan/manifest.json"],
+        "assets": [
+          "custom_components/miele_lan/manifest.json"
+        ],
         "message": "chore: Release v${nextRelease.version} [skip ci]"
       }
     ],
