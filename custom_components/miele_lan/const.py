@@ -36,6 +36,7 @@ CONF_DEVICES = "devices"            # list[{fabNr, deviceType, deviceName}] from
 CONF_HA_FAB = "ha_fab"              # our synthetic fab number
 CONF_HA_PORT = "ha_port"            # which unprivileged port our listener uses
 CONF_STATIC_IPS = "static_ips"      # optional dict fab→ip for users whose mDNS is flaky
+STATIC_IPS_TEXT_FIELD = "static_ips_text"  # options-flow free-form fab=ip textarea field
 
 CONF_FLOW_KIND = "flow_kind"        # "cloud" vs "manual" (single-device legacy path)
 DEFAULT_HA_PUSH_PORT = 18082

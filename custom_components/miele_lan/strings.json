@@ -65,6 +65,24 @@
       "reloaded": "Reloading the integration — the new device will be picked up automatically."
     }
   },
+  "options": {
+    "step": {
+      "known_devices": {
+        "title": "Miele@LAN — static IPs",
+        "description": "Only needed if your network blocks mDNS/multicast between Home Assistant and the appliances (VLANs, IGMP snooping, an access point that filters mDNS). Enter an IPv4 address for an appliance to pin it, or leave a field blank to fall back to automatic discovery. Known appliances in this household: {devices}"
+      },
+      "freeform": {
+        "title": "Miele@LAN — static IPs",
+        "description": "Only needed if your network blocks mDNS/multicast between Home Assistant and the appliances (VLANs, IGMP snooping, an access point that filters mDNS). This household has no known appliances yet, so list them manually below.",
+        "data_description": {
+          "static_ips_text": "One `fabNr=IP` pair per line, e.g. `000000000000=192.0.2.1`. Leave a line out to fall back to automatic discovery for that appliance."
+        }
+      }
+    },
+    "error": {
+      "invalid_static_ip": "One or more entries are invalid — the fab number must be 12 digits and the address a valid IPv4 address."
+    }
+  },
   "entity": {
     "sensor": {
       "status": {

@@ -66,6 +66,24 @@
       "reloaded": "Konfiguration wird neu geladen, neues Geraet wird automatisch erkannt."
     }
   },
+  "options": {
+    "step": {
+      "known_devices": {
+        "title": "Miele@LAN — Statische IPs",
+        "description": "Nur nötig, wenn dein Netzwerk mDNS/Multicast zwischen Home Assistant und den Geräten blockiert (VLANs, IGMP-Snooping, ein Access Point, der mDNS filtert). Für ein Gerät eine IPv4-Adresse eintragen, um sie festzulegen, oder ein Feld leer lassen, um zur automatischen Erkennung zurückzukehren. Bekannte Geräte in diesem Haushalt: {devices}"
+      },
+      "freeform": {
+        "title": "Miele@LAN — Statische IPs",
+        "description": "Nur nötig, wenn dein Netzwerk mDNS/Multicast zwischen Home Assistant und den Geräten blockiert (VLANs, IGMP-Snooping, ein Access Point, der mDNS filtert). Für diesen Haushalt sind noch keine Geräte bekannt — bitte unten manuell eintragen.",
+        "data_description": {
+          "static_ips_text": "Ein `fabNr=IP`-Paar pro Zeile, z. B. `000000000000=192.0.2.1`. Eine Zeile weglassen, um für dieses Gerät zur automatischen Erkennung zurückzukehren."
+        }
+      }
+    },
+    "error": {
+      "invalid_static_ip": "Ein oder mehrere Einträge sind ungültig — die Fabriknummer muss 12-stellig sein und die Adresse eine gültige IPv4-Adresse."
+    }
+  },
   "entity": {
     "sensor": {
       "status": {

@@ -22,6 +22,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
 from homeassistant.const import CONF_HOST
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
 from .api import MieleLanClient
@@ -34,6 +35,7 @@ from .cloud import (
     parse_redirect_url,
 )
 from .enrollment import mdns_discover_household, mdns_household_ids
+from .options_validation import merge_known_device_fields, parse_static_ip_lines
 from .const import (
     CONF_COUNTRY,
     CONF_DEVICES,
@@ -44,9 +46,11 @@ from .const import (
     CONF_REFRESH_TOKEN,
     CONF_REGION,
     CONF_ROUTE,
+    CONF_STATIC_IPS,
     DEFAULT_HA_PUSH_PORT,
     DEFAULT_NAME,
     DOMAIN,
+    STATIC_IPS_TEXT_FIELD,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,6 +91,14 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Cloud path
         self._challenge: PKCEChallenge | None = None
         self._authorize_url: str | None = None
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> MieleLanOptionsFlow:
+        """Static IPs for households whose mDNS/multicast doesn't reach HA."""
+        return MieleLanOptionsFlow()
 
     # --------------------------------------------------------------- entrypoint
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -415,4 +427,99 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "group_id": getattr(self, "_discovered_group_id", "") or "?",
                 "fab": getattr(self, "_discovered_fab", "") or "(unknown)",
             },
+        )
+
+
+class MieleLanOptionsFlow(config_entries.OptionsFlow):
+    """Static fabNr -> IP overrides for households whose mDNS/multicast
+    doesn't reach HA. See issue #14."""
+
+    def _current_static_ips(self) -> dict[str, str]:
+        return {
+            **(self.config_entry.data.get(CONF_STATIC_IPS) or {}),
+            **(self.config_entry.options.get(CONF_STATIC_IPS) or {}),
+        }
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        devices: list[dict[str, Any]] = list(
+            self.config_entry.data.get(CONF_DEVICES) or []
+        )
+        if devices:
+            return await self.async_step_known_devices()
+        return await self.async_step_freeform()
+
+    async def async_step_known_devices(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """One optional field per known appliance, keyed by its fab number."""
+        devices: list[dict[str, Any]] = list(
+            self.config_entry.data.get(CONF_DEVICES) or []
+        )
+        current = self._current_static_ips()
+        names = {
+            d["fabNr"]: d.get("deviceName") or ""
+            for d in devices
+            if d.get("fabNr")
+        }
+        fabs = sorted(names)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            submitted = {fab: user_input.get(fab, "") for fab in fabs}
+            new_static, invalid = merge_known_device_fields(current, submitted)
+            if invalid:
+                errors["base"] = "invalid_static_ip"
+            else:
+                return self.async_create_entry(
+                    title="", data={CONF_STATIC_IPS: new_static}
+                )
+        return self.async_show_form(
+            step_id="known_devices",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        fab, description={"suggested_value": current.get(fab, "")}
+                    ): str
+                    for fab in fabs
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "devices": ", ".join(
+                    f"`{fab}`" + (f" ({names[fab]})" if names[fab] else "")
+                    for fab in fabs
+                )
+            },
+        )
+
+    async def async_step_freeform(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """No known devices yet — the household's cloud/mDNS discovery never
+        ran. Accept `fabNr=IP` pairs, one per line, instead."""
+        current = self._current_static_ips()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            mapping, bad_lines = parse_static_ip_lines(
+                user_input.get(STATIC_IPS_TEXT_FIELD, "")
+            )
+            if bad_lines:
+                errors["base"] = "invalid_static_ip"
+            else:
+                return self.async_create_entry(
+                    title="", data={CONF_STATIC_IPS: mapping}
+                )
+        default_text = "\n".join(f"{fab}={ip}" for fab, ip in sorted(current.items()))
+        return self.async_show_form(
+            step_id="freeform",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        STATIC_IPS_TEXT_FIELD,
+                        description={"suggested_value": default_text},
+                    ): str
+                }
+            ),
+            errors=errors,
         )

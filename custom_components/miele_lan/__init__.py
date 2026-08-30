@@ -89,11 +89,15 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     devices: list[dict[str, Any]] = list(entry.data.get(CONF_DEVICES) or [])
     ha_fab: str = entry.data[CONF_HA_FAB]
     ha_port: int = entry.data.get(CONF_HA_PORT, DEFAULT_HA_PUSH_PORT)
-    # Bootstrap fab→IP map from the direct-keys setup blob. mDNS results
-    # discovered below win over this on collision (a stale cached IP from
-    # config-flow time shouldn't beat what the appliance is announcing right
-    # now).
-    static_ips: dict[str, str] = entry.data.get(CONF_STATIC_IPS) or {}
+    # Bootstrap fab→IP map from the direct-keys setup blob, layered under
+    # whatever the user has since set via the options flow (Settings →
+    # Configure). mDNS results discovered below win over both on collision (a
+    # stale cached IP from config-flow time shouldn't beat what the appliance
+    # is announcing right now).
+    static_ips: dict[str, str] = {
+        **(entry.data.get(CONF_STATIC_IPS) or {}),
+        **(entry.options.get(CONF_STATIC_IPS) or {}),
+    }
 
     # HA's LAN-facing IP on the interface that routes toward the appliances.
     # If we know any appliance IP, route toward it (multi-homed boxes pick the
@@ -296,9 +300,15 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass, _token_refresh_loop(hass, entry), name=f"{DOMAIN}_token_refresh"
         )
 
+    bundle["options_unsub"] = entry.add_update_listener(_async_options_updated)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = bundle
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Options flow changed the static-IP map — reload so it takes effect."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def _safe_stop_listener(listener: MielePushListener) -> None:
@@ -344,6 +354,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     bundle = hass.data[DOMAIN].pop(entry.entry_id, None)
     if bundle is None:
         return True
+    options_unsub = bundle.get("options_unsub")
+    if options_unsub is not None:
+        options_unsub()
     task = bundle.get("token_refresh_task")
     if task is not None:
         task.cancel()
@@ -370,7 +383,10 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     group_id = entry.data.get(CONF_GROUP_ID)
     group_key = entry.data.get(CONF_GROUP_KEY)
     ha_fab = entry.data.get(CONF_HA_FAB)
-    static_ips = entry.data.get(CONF_STATIC_IPS) or {}
+    static_ips = {
+        **(entry.data.get(CONF_STATIC_IPS) or {}),
+        **(entry.options.get(CONF_STATIC_IPS) or {}),
+    }
     if not (group_id and group_key and ha_fab and static_ips):
         return
     import json as _json
