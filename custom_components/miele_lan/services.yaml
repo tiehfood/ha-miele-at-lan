@@ -1,0 +1,39 @@
+dump_dop2_leaf:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: miele_lan
+    unit:
+      required: true
+      example: 2
+      selector:
+        number:
+          min: 0
+          max: 65535
+          mode: box
+    attribute:
+      required: true
+      example: 1585
+      selector:
+        number:
+          min: 0
+          max: 65535
+          mode: box
+    idx1:
+      required: false
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 65535
+          mode: box
+    idx2:
+      required: false
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 65535
+          mode: box

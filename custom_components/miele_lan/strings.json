@@ -2163,5 +2163,33 @@
         "name": "Stop program"
       }
     }
+  },
+  "services": {
+    "dump_dop2_leaf": {
+      "name": "Dump DOP2 leaf",
+      "description": "Reads one raw DOP2 leaf from an appliance and returns its bytes as hex. Read-only — never writes anything to the appliance. Useful for reporting undocumented data (consumables, sensor values) in a GitHub issue.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The Miele@LAN device to read from."
+        },
+        "unit": {
+          "name": "Unit",
+          "description": "DOP2 unit number, e.g. 2 or 14."
+        },
+        "attribute": {
+          "name": "Attribute",
+          "description": "DOP2 attribute (leaf) number within the unit, e.g. 1585."
+        },
+        "idx1": {
+          "name": "Index 1",
+          "description": "First DOP2 index parameter. Leave at 0 unless you know the leaf is indexed."
+        },
+        "idx2": {
+          "name": "Index 2",
+          "description": "Second DOP2 index parameter. Leave at 0 unless you know the leaf is indexed."
+        }
+      }
+    }
   }
 }

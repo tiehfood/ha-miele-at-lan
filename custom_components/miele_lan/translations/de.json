@@ -2179,5 +2179,33 @@
         "name": "Programm stoppen"
       }
     }
+  },
+  "services": {
+    "dump_dop2_leaf": {
+      "name": "DOP2-Blatt auslesen",
+      "description": "Liest ein rohes DOP2-Blatt von einem Gerät aus und gibt die Bytes als Hex-String zurück. Rein lesend — schreibt niemals etwas auf das Gerät. Nützlich, um nicht dokumentierte Daten (Verbrauchsmaterial, Sensorwerte) in einem GitHub-Issue zu melden.",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Das Miele@LAN-Gerät, von dem du lesen möchtest."
+        },
+        "unit": {
+          "name": "Unit",
+          "description": "DOP2-Unit-Nummer, z. B. 2 oder 14."
+        },
+        "attribute": {
+          "name": "Attribut",
+          "description": "DOP2-Attribut (Blatt) innerhalb der Unit, z. B. 1585."
+        },
+        "idx1": {
+          "name": "Index 1",
+          "description": "Erster DOP2-Indexparameter. Lass ihn bei 0, wenn du nicht weißt, dass das Blatt indiziert ist."
+        },
+        "idx2": {
+          "name": "Index 2",
+          "description": "Zweiter DOP2-Indexparameter. Lass ihn bei 0, wenn du nicht weißt, dass das Blatt indiziert ist."
+        }
+      }
+    }
   }
 }

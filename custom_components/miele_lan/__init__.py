@@ -52,6 +52,7 @@ from .push_listener import (
     detect_lan_ip,
     synthetic_mac_hostname,
 )
+from .services import async_remove_services, async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Miele@LAN from a config entry. Both flow kinds (cloud OAuth and
     direct-keys with mDNS discovery) share the same runtime — one household
     entry, multi-device, push-first."""
+    async_setup_services(hass)
     flow_kind = entry.data.get("flow_kind", "cloud")
     if flow_kind == "manual":
         # Legacy v1 single-device entries from pre-0.3.0 installs. Migrate
@@ -351,6 +353,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:
         return False
+    async_remove_services(hass)
     bundle = hass.data[DOMAIN].pop(entry.entry_id, None)
     if bundle is None:
         return True
