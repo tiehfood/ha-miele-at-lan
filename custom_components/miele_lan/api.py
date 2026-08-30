@@ -300,9 +300,13 @@ class MieleLanClient:
         """Send a GLOBAL_USER_REQ opcode via DOP2 leaf 2/1583.
 
         Works across oven, laundry, and dishwasher device classes.
-        The front-panel "Mobile controllable" setting must be on, else the device
-        returns HTTP 500. Some firmwares (e.g. EK057 FW 08.32) block all DOP2
-        writes unconditionally and return HTTP 404.
+        Some firmwares (e.g. EK057 FW 08.32) block all DOP2 writes
+        unconditionally and return HTTP 404. A 403 means the appliance
+        rejected the request as unauthorized (e.g. "Remote control" /
+        "Mobile controllable" disabled in its settings menu). A 500 is the
+        appliance failing to execute the command — it does not indicate a
+        settings problem; the appliance may be in a state that doesn't accept
+        this command right now, or this model may not support it locally.
         """
         payload = build_user_request_payload(opcode)
         resource = (
@@ -320,10 +324,16 @@ class MieleLanClient:
                     "This appliance's firmware does not accept remote commands "
                     "over the local API (DOP2 writes are blocked on this hardware/firmware)."
                 ) from exc
-            if status == 500:
+            if status == 403:
                 raise HomeAssistantError(
                     "Remote control was refused. Enable 'Remote control' / "
                     "'Mobile controllable' in the appliance's settings menu and try again."
+                ) from exc
+            if status == 500:
+                raise HomeAssistantError(
+                    "The appliance rejected the command (HTTP 500). This can happen "
+                    "if it isn't in a state that accepts it right now, or if this "
+                    "model doesn't support this command over the local API."
                 ) from exc
             raise HomeAssistantError(
                 f"Remote command failed (HTTP {status})."
