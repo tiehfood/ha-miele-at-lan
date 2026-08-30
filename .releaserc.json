@@ -1,0 +1,53 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits"
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            { "type": "feat", "section": "Features" },
+            { "type": "fix", "section": "Bug Fixes" },
+            { "type": "perf", "section": "Performance" },
+            { "type": "revert", "section": "Reverts" },
+            { "type": "refactor", "section": "Refactoring" },
+            { "type": "ci", "section": "Build & CI" },
+            { "type": "docs", "section": "Documentation" },
+            { "type": "chore", "hidden": true },
+            { "type": "test", "hidden": true },
+            { "type": "style", "hidden": true }
+          ]
+        }
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "jq --indent 2 --arg v '${nextRelease.version}' '.version = $v' custom_components/miele_lan/manifest.json > manifest.tmp && mv manifest.tmp custom_components/miele_lan/manifest.json",
+        "successCmd": "echo 'VERSION_NUMBER=${nextRelease.version}' >> release.env"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["custom_components/miele_lan/manifest.json"],
+        "message": "chore: Release v${nextRelease.version} [skip ci]"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "successComment": false,
+        "failComment": false
+      }
+    ]
+  ]
+}

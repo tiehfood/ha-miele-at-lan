@@ -1,69 +1,74 @@
 name: Release
 
+# Conventional-commit driven releases via semantic-release.
+#   push to `main` → analyse commits → bump manifest.json → tag vX.Y.Z → GitHub release
+# Only feat / fix / perf / revert commits cut a release; ci, chore, docs and test
+# commits ride along in the notes of the next one. A release is only cut when the
+# test gate below is green, so a broken commit cannot reach HACS users.
+#
+# The release commit carries [skip ci], so writing manifest.json back to main
+# does not trigger this workflow again.
+
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to release (e.g. v1.0.0)"
-        required: true
+
+# Never run two releases on the same branch concurrently.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   release:
-    name: Publish GitHub Release
+    name: Test gate + semantic-release
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve ref
-        id: ref
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "ref=$INPUT_TAG" >> "$GITHUB_OUTPUT"
-            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=$GITHUB_REF" >> "$GITHUB_OUTPUT"
-            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v5
         with:
-          ref: ${{ steps.ref.outputs.ref }}
+          fetch-depth: 0 # semantic-release needs full history + tags
 
-      - name: Verify manifest version matches tag
-        env:
-          TAG: ${{ steps.ref.outputs.tag }}
-        run: |
-          TAG_VERSION="${TAG#v}"
-          MANIFEST_VERSION=$(jq -r '.version' custom_components/miele_lan/manifest.json)
-          if [ "$TAG_VERSION" != "$MANIFEST_VERSION" ]; then
-            echo "::error::Tag $TAG (=> $TAG_VERSION) does not match manifest.json version $MANIFEST_VERSION"
-            exit 1
-          fi
-          echo "OK: tag $TAG matches manifest version $MANIFEST_VERSION"
-
-      - name: Detect prerelease
-        id: meta
-        env:
-          TAG: ${{ steps.ref.outputs.tag }}
-        run: |
-          if printf '%s' "$TAG" | grep -q -- '-'; then
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      # ---- Test gate: a broken commit must not cut a release ----
+      - uses: actions/setup-python@v6
         with:
-          tag_name: ${{ steps.ref.outputs.tag }}
-          name: ${{ steps.ref.outputs.tag }}
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ steps.meta.outputs.prerelease }}
+          python-version: "3.13"
+      - run: pip install -q homeassistant asyncmiele==0.2.6 pytest pytest-asyncio pyyaml
+      - run: pytest tests/ -q
+      # -----------------------------------------------------------
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24" # semantic-release@25 needs >=24.10
+
+      # EXACT pins, not major ranges: the plugins and the conventional-changelog
+      # packages are only compatible in specific combinations, and a floating
+      # range can resolve an incompatible pair that fails *after* the version has
+      # been computed. Bump these deliberately, together, and watch the first
+      # release afterwards.
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          npx --yes
+          --package semantic-release@25.0.9
+          --package @semantic-release/exec@7.1.0
+          --package @semantic-release/git@10.0.1
+          --package conventional-changelog-conventionalcommits@10.3.0
+          semantic-release
+
+      # semantic-release writes release.env only when it actually published.
+      - name: Credit contributors in the release notes
+        if: hashFiles('release.env') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -a
+          . ./release.env
+          set +a
+          bash .github/scripts/release-contributors.sh "$VERSION_NUMBER"
