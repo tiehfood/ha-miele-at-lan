@@ -25,6 +25,7 @@ from dataclasses import dataclass
 import aiohttp
 
 from .api import MieleLanClient
+from .enrollment_report import FailedDevice
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +49,14 @@ class EnrolledDevice:
     supervision_ok: bool        # PUT /SuperVision/{ha_fab} {Show,Signal} accepted
     subscriptions_ok: list[str]  # resources for which /Subscriptions/ returned 2xx
     enrolled_at: float           # epoch seconds when enrollment completed
+
+
+@dataclass(frozen=True)
+class EnrollmentResult:
+    """Outcome of enroll_all() — what worked, what didn't, and why."""
+
+    enrolled: list[EnrolledDevice]
+    failed: list[FailedDevice]
 
 
 def _miele_pad(body: bytes) -> bytes:
@@ -120,10 +129,10 @@ async def enroll_device(
     ha_fab: str,
     ha_hostname: str,
     ha_port: int,
-) -> EnrolledDevice | None:
+) -> EnrolledDevice | FailedDevice:
     """Run the full enrollment dance against one appliance.
 
-    Returns None on any failure; logs the reason at WARNING level.
+    Returns a FailedDevice on any failure; logs the reason at WARNING level.
     Successful enrollment is logged at INFO.
     """
     sv_ok = False
@@ -140,13 +149,22 @@ async def enroll_device(
                     "or not cloud-paired: %s",
                     fab, host_ip, err,
                 )
-                return None
+                return FailedDevice(
+                    fab=fab,
+                    reason=(
+                        "signed verify failed — wrong key, appliance offline, "
+                        "or not paired into this household"
+                    ),
+                )
             if fab not in devices:
                 _LOGGER.warning(
                     "[%s @ %s] device responded but fab not in /Devices listing (got %s)",
                     fab, host_ip, list(devices),
                 )
-                return None
+                return FailedDevice(
+                    fab=fab,
+                    reason="appliance answered but does not list this fab number",
+                )
 
             # 2. SuperVision peer entry — Show=true, Signal=true.
             sv_body = json.dumps({"Show": True, "Signal": True}).encode("utf-8")
@@ -177,7 +195,7 @@ async def enroll_device(
                 _LOGGER.warning("[%s] SuperVision PUT raised: %s", fab, err)
     except Exception as err:
         _LOGGER.warning("[%s @ %s] enrollment dance failed: %s", fab, host_ip, err)
-        return None
+        return FailedDevice(fab=fab, reason=f"enrollment failed: {err}")
 
     # 3. Subscriptions — POST /Subscriptions to register our callback URLs.
     async with aiohttp.ClientSession() as session:
@@ -317,13 +335,14 @@ async def enroll_all(
     ha_hostname: str,
     ha_port: int,
     resolver: "DeviceIpResolver",
-) -> list[EnrolledDevice]:
+) -> EnrollmentResult:
     """Enroll every cloud-listed device that we can reach on the LAN.
 
     Devices we can't resolve (offline, mDNS slow, different VLAN) are skipped
     with a WARNING; enrollment can be retried later when they come online.
     """
     enrolled: list[EnrolledDevice] = []
+    failed: list[FailedDevice] = []
     for d in devices:
         fab = d.get("fabNr") or d.get("fab")
         if not fab:
@@ -333,6 +352,10 @@ async def enroll_all(
             _LOGGER.warning(
                 "could not resolve LAN IP for %s — will retry next refresh", fab
             )
+            failed.append(FailedDevice(
+                fab=fab,
+                reason="no LAN IP found (mDNS did not answer and no static IP is configured)",
+            ))
             continue
         result = await enroll_device(
             fab=fab,
@@ -343,9 +366,11 @@ async def enroll_all(
             ha_hostname=ha_hostname,
             ha_port=ha_port,
         )
-        if result is not None:
+        if isinstance(result, EnrolledDevice):
             enrolled.append(result)
-    return enrolled
+        else:
+            failed.append(result)
+    return EnrollmentResult(enrolled=enrolled, failed=failed)
 
 
 class DeviceIpResolver:
@@ -628,6 +653,8 @@ async def _signed_get_fabs(
 
 __all__ = [
     "EnrolledDevice",
+    "EnrollmentResult",
+    "FailedDevice",
     "DeviceIpResolver",
     "enroll_device",
     "enroll_all",

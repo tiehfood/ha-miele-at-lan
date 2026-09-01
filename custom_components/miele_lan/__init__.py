@@ -22,6 +22,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import issue_registry as ir
 
 from .api import MieleLanClient
 from .cloud import refresh_access_token
@@ -46,6 +47,7 @@ from .enrollment import (
     mdns_discover_household,
     mdns_household_ids,
 )
+from .enrollment_report import issue_translation_placeholders, summary_line
 from .push_listener import (
     MielePushListener,
     PushEvent,
@@ -230,7 +232,7 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     resolver = DeviceIpResolver(static=merged_static_ips, zeroconf=shared_zc)
     try:
-        enrolled = await enroll_all(
+        enrollment_result = await enroll_all(
             devices,
             group_id_hex=group_id,
             group_key_hex=group_key,
@@ -242,6 +244,7 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception:
         await _safe_stop_listener(listener)
         raise
+    enrolled = enrollment_result.enrolled
 
     # Tidy up stale subscriptions from prior HA installs / fabs. The Miele
     # firmware never re-uses slot numbers, so leftover subs from an old
@@ -298,6 +301,24 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "Configure static IPs in the integration's options if your "
             "network blocks mDNS/multicast."
         )
+
+    issue_id = f"unenrolled_devices_{entry.entry_id}"
+    failed = enrollment_result.failed
+    line = summary_line(len(bundle["coordinators"]), failed)
+    if failed:
+        _LOGGER.warning(line)
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="unenrolled_devices",
+            translation_placeholders=issue_translation_placeholders(failed),
+        )
+    else:
+        _LOGGER.info(line)
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
 
     if entry.data.get(CONF_REFRESH_TOKEN):
         bundle["token_refresh_task"] = entry.async_create_background_task(
@@ -383,6 +404,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     every appliance and disabling our SuperVision peer entry. Best-effort —
     failures are logged but never block removal.
     """
+    ir.async_delete_issue(hass, DOMAIN, f"unenrolled_devices_{entry.entry_id}")
     if entry.data.get("flow_kind") != "cloud":
         return
     group_id = entry.data.get(CONF_GROUP_ID)

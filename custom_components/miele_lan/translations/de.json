@@ -2241,5 +2241,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "unenrolled_devices": {
+      "title": "{count} Miele-Gerät(e) konnten nicht eingebunden werden",
+      "description": "Miele@LAN konnte die Einrichtung für folgende Geräte nicht abschließen. Sie sind deinem Miele-Cloud-Haushalt bekannt, haben aber aktuell weder Koordinator noch Gerätekarte in Home Assistant:\n\n{devices}\n\nDas ist meist vorübergehend (Gerät aus, mDNS hat nicht geantwortet, falscher Haushaltsschlüssel). Funktionierende Geräte sind davon nicht betroffen. Lade die Integration neu, sobald das Gerät wieder erreichbar ist — dieses Problem verschwindet automatisch, sobald alle Geräte eingebunden sind."
+    }
   }
 }
