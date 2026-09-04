@@ -39,13 +39,15 @@ Local Home Assistant integration for Miele@home appliances — ovens, hobs, dish
 | **Washer / dryer / washer-dryer** | WWG/TWC/WWV/WTV series | status, program, phase, drying step, remaining/elapsed/start time, door, signals | start / stop / pause, wake |
 | **Fridge / freezer / fridge-freezer** | KF 7772 B, K 7000, KFN, KFNS, … | per-zone current + target temp, per-zone door, SuperCool, SuperFreeze, failure | — *(see Limitations)* |
 | **Wine cabinet** | KWT 6000, KWNS, KWTUS, wine + freezer | per-zone temp, per-zone door, light state | — *(see Limitations)* |
-| **Hood / range vent** | DA series | fan step, light state | light |
+| **Hood / range vent** | DA series, EK039W | fan step, light state, grease & charcoal filter saturation† | fan (off / 1-3 / boost)†, fan run-on time†, light |
 | **Coffee system** | CVA series | status, program, phase | start, stop, pause, wake, power |
 | **Dish warmer** | ESW series | status | start, stop, wake, power |
 
 Diagnostic entities (raw enums, WLAN info, push state, firmware version) are created but disabled by default — enable them per device under **Configure entities**.
 
 \* Oven setpoint writes work where firmware honours `MobileStart` (RE'd on H7560BP). Some appliances may need MobileStart enabled on the panel.
+
+† Hood ventilation, run-on time and filter saturation use the legacy Dop1 protocol, which the official Miele app itself picks for hoods reporting `ProtocolVersion 2` — the DOP2 path every other control here uses answers HTTP 404 on this hardware. Hoods reporting 3/4 keep the read-only fan-step sensor and the light.
 
 ## Installation
 

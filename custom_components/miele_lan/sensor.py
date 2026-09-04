@@ -608,6 +608,22 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             value_fn=lambda s: {0: "not_supported", 1: "on", 2: "off"}.get(s.get("Light")),
         ),
     ),
+    # Hood extraction-fan step: 0 = off, 1-3 = speed, 4 = boost, 5 = interval.
+    # Kept as a sensor alongside the fan entity because the fan is only
+    # created for hoods that take the Dop1 writes (see fan.py), so this is
+    # the ventilation reading every other hood still gets — and it gives the
+    # writable ones long-term history the fan entity's preset can't.
+    MieleLanSensorDef(
+        types=(MieleAppliance.HOOD,),
+        description=MieleLanSensorDescription(
+            key="ventilation_step",
+            translation_key="ventilation_step",
+            icon="mdi:fan",
+            state_class=SensorStateClass.MEASUREMENT,
+            required_state_key="VentilationStep",
+            value_fn=lambda s: s.get("VentilationStep"),
+        ),
+    ),
 )
 
 
@@ -690,6 +706,33 @@ DOP2_SENSORS: tuple[MieleLanDop2SensorDef, ...] = (
                 if (v := (d.get("hours_of_operation") or {}).get("total")) is not None
                 else None
             ),
+        ),
+    ),
+    # Hood filter saturation grades (0..4 against the appliance's own
+    # thresholds). Read over Dop1 rather than DOP2 — see
+    # coordinator._maybe_refresh_hood_filters, which parks them in the same
+    # dict to reuse this plumbing. A hood with no charcoal filter fitted
+    # won't report that grade, so its sensor is simply not created.
+    MieleLanDop2SensorDef(
+        types=(MieleAppliance.HOOD,),
+        description=MieleLanDop2SensorDescription(
+            key="grease_filter_grade",
+            translation_key="grease_filter_grade",
+            state_class=SensorStateClass.MEASUREMENT,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            required_dop2_key="grease_filter_grade",
+            value_fn=lambda d: d.get("grease_filter_grade"),
+        ),
+    ),
+    MieleLanDop2SensorDef(
+        types=(MieleAppliance.HOOD,),
+        description=MieleLanDop2SensorDescription(
+            key="charcoal_filter_grade",
+            translation_key="charcoal_filter_grade",
+            state_class=SensorStateClass.MEASUREMENT,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            required_dop2_key="charcoal_filter_grade",
+            value_fn=lambda d: d.get("charcoal_filter_grade"),
         ),
     ),
 )
@@ -918,9 +961,13 @@ async def async_setup_entry(
         for d in DOP2_SENSORS:
             if dt not in d.types:
                 continue
-            if not coord.hours_of_operation_supported:
-                continue
             rdk = d.description.required_dop2_key
+            # `hours_of_operation_supported` tracks one specific DOP2 leaf
+            # (2/119) and says nothing about the other entries here — the hood
+            # filter grades don't even come from DOP2 (see coordinator.py) —
+            # so only the sensor fed by that leaf is gated on it.
+            if rdk == "hours_of_operation" and not coord.hours_of_operation_supported:
+                continue
             if rdk is not None and rdk not in coord.data.dop2:
                 continue
             entities.append(MieleLanDop2Sensor(coord, d.description))

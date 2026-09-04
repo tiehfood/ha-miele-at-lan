@@ -21,7 +21,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MieleLanClient
-from .const import DOMAIN, LAUNDRY_FAMILY, OVEN_FAMILY, MieleAppliance
+from .const import (
+    DOMAIN,
+    LAUNDRY_FAMILY,
+    OVEN_FAMILY,
+    PF_DA_FETTFILTER_GRENZE_AKTUELL,
+    PF_DA_KOHLEFILTER_GRENZE_AKTUELL,
+    MieleAppliance,
+)
 from .dop2 import parse_global_device_context, parse_hours_of_operation
 from .enrollment import EnrolledDevice
 from .push_listener import PushEvent
@@ -36,6 +43,10 @@ WLAN_REFRESH_INTERVAL = 300  # seconds — RSSI/signal-percentage drift slowly;
                              # 5-minute cadence keeps values roughly current.
 DEVICE_CONTEXT_REFRESH_INTERVAL = 600  # seconds — TwinDos fill level and wash2dry
                                        # state evolve on a per-cycle timescale.
+HOOD_FILTER_REFRESH_INTERVAL = 3600  # seconds — grease/charcoal filter saturation
+                                     # creeps up over weeks, so hourly is ample.
+IDENT_MAX_ATTEMPTS = 5  # /Ident is fetched once; these are the retries allowed
+                        # when it comes back without the fields entities gate on.
 
 
 @dataclass
@@ -77,11 +88,14 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         self.enrollment = enrollment
         self._data = MieleLanData()
         self._ident_loaded = False
+        self._ident_attempts = 0
         self._dop2_last_fetch: float = 0.0
         self._hours_unsupported = False
         self._wlan_last_fetch: float = 0.0
         self._device_context_last_fetch: float = 0.0
         self._device_context_unsupported: bool = False
+        self._hood_filters_last_fetch: float = 0.0
+        self._hood_filters_unsupported: bool = False
         self._last_push_at: float | None = None
         self._push_count = 0
 
@@ -106,6 +120,33 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
             except ValueError:
                 return MieleAppliance.UNKNOWN
         return MieleAppliance.UNKNOWN
+
+    @property
+    def protocol_version(self) -> int | None:
+        """Miele's DOP-generation enum from /Ident (2 = legacy Dop1, 3/4 = DOP2).
+
+        None until /Ident has loaded. Coerced the same way as `device_type`
+        above, because /Ident is inconsistent about whether its numeric
+        fields arrive as ints or as digit strings.
+        """
+        raw = (self._data.ident or {}).get("protocol_version")
+        if isinstance(raw, int):
+            return raw
+        if isinstance(raw, str) and raw.isdigit():
+            return int(raw)
+        return None
+
+    @property
+    def hood_dop1_supported(self) -> bool:
+        """Whether this appliance takes the hood Dop1 writes (fan, light, settings).
+
+        Mirrors the gate the official Miele app applies: the Dop1 action
+        variants declare themselves supported for ProtocolVersion == 2, and
+        the struct layouts in const.py are hood-specific. On a 3/4 hood the
+        app would route to a DOP2 mechanism we haven't confirmed, so those
+        appliances keep read-only ventilation telemetry and the /State light.
+        """
+        return self.device_type is MieleAppliance.HOOD and self.protocol_version == 2
 
     @property
     def hours_of_operation_supported(self) -> bool:
@@ -155,11 +196,26 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
             state = await self.client.get_state()
             self._data.state = dict(state.raw_state)
             if not self._ident_loaded:
-                self._data.ident = await self._fetch_full_ident()
-                self._ident_loaded = True
+                ident = await self._fetch_full_ident()
+                self._data.ident = ident
+                self._ident_attempts += 1
+                # Retry-on-empty, same reasoning as _maybe_refresh_wlan: a
+                # transient failure on the very first fetch would otherwise
+                # latch a permanently-empty ident, and entities gated on
+                # device_type / protocol_version (the hood fan) would never
+                # be created for the rest of the HA run. Give up after a few
+                # tries so an appliance that simply never reports these
+                # fields doesn't re-fetch /Ident on every poll forever.
+                if (
+                    ident.get("device_type")
+                    or ident.get("protocol_version") is not None
+                    or self._ident_attempts >= IDENT_MAX_ATTEMPTS
+                ):
+                    self._ident_loaded = True
             await self._maybe_refresh_wlan()
             await self._maybe_refresh_hours_of_operation()
             await self._maybe_refresh_device_context()
+            await self._maybe_refresh_hood_filters()
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(str(err)) from err
         return self._data
@@ -260,6 +316,51 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("[%s] DOP2 2/1585 parse failed: %s", self.fab, err)
 
+    async def _maybe_refresh_hood_filters(self) -> None:
+        """Read the hood's grease/charcoal filter saturation grades.
+
+        Both come from the generic Dop1 Programmierfunktion object rather than
+        DOP2, so this is gated on `hood_dop1_supported`. Grades are 0..4
+        against the appliance's own DA_*FILTER_BST_GRENZE thresholds.
+
+        Results land in `dop2` to reuse the existing DOP2 sensor plumbing.
+        A hood with no charcoal filter fitted simply won't answer for that
+        one; only when *neither* grade comes back do we latch off, since that
+        means this firmware doesn't expose filter grades at all and further
+        reads would be pure noise.
+        """
+        if self._hood_filters_unsupported or not self.hood_dop1_supported:
+            return
+        now = time.monotonic()
+        # Throttle once we hold *either* grade — a hood with no charcoal
+        # filter fitted only ever reports the grease one, and keying the
+        # throttle on grease alone would re-read every poll on a hood that
+        # happens to report only charcoal.
+        have_grade = any(
+            self._data.dop2.get(k) is not None
+            for k in ("grease_filter_grade", "charcoal_filter_grade")
+        )
+        if have_grade and now - self._hood_filters_last_fetch < HOOD_FILTER_REFRESH_INTERVAL:
+            return
+        self._hood_filters_last_fetch = now
+        try:
+            grease = await self.client.read_setting_pf(PF_DA_FETTFILTER_GRENZE_AKTUELL)
+            charcoal = await self.client.read_setting_pf(PF_DA_KOHLEFILTER_GRENZE_AKTUELL)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("[%s] hood filter settings read failed: %s", self.fab, err)
+            return
+        if grease is None and charcoal is None:
+            self._hood_filters_unsupported = True
+            _LOGGER.debug(
+                "[%s] hood exposes no filter saturation grades — disabling those reads",
+                self.fab,
+            )
+            return
+        if grease is not None:
+            self._data.dop2["grease_filter_grade"] = grease
+        if charcoal is not None:
+            self._data.dop2["charcoal_filter_grade"] = charcoal
+
     async def _fetch_wlan(self) -> dict[str, Any]:
         """Read `/WLAN/` once at first refresh. The device exposes its current
         WiFi config + RSSI/signal-strength here (no auth needed beyond the
@@ -343,6 +444,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
             "xkm_tech_type": "",
             "xkm_fab_number": "",
             "xkm_release_version": "",
+            "protocol_version": None,
         }
         try:
             _, raw = await self.client.raw._request_bytes(
@@ -362,6 +464,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                     "xkm_tech_type": xkm_label.get("TechType", ""),
                     "xkm_fab_number": xkm_label.get("FabNumber", ""),
                     "xkm_release_version": xkm_label.get("ReleaseVersion", ""),
+                    "protocol_version": data.get("ProtocolVersion"),
                 }
             )
         except Exception as err:  # noqa: BLE001

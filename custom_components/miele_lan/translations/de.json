@@ -2085,6 +2085,15 @@
       },
       "plate_6_duration_minutes": {
         "name": "Kochzone 6 Programm-Dauer"
+      },
+      "ventilation_step": {
+        "name": "Lüfterstufe"
+      },
+      "grease_filter_grade": {
+        "name": "Fettfilter-Sättigung"
+      },
+      "charcoal_filter_grade": {
+        "name": "Kohlefilter-Sättigung"
       }
     },
     "binary_sensor": {
@@ -2177,6 +2186,31 @@
       },
       "stop_program": {
         "name": "Programm stoppen"
+      }
+    },
+    "fan": {
+      "ventilation": {
+        "name": "Lüfter",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "1": "Stufe 1",
+              "2": "Stufe 2",
+              "3": "Stufe 3",
+              "boost": "Intensivstufe"
+            }
+          }
+        }
+      }
+    },
+    "select": {
+      "fan_run_on_time": {
+        "name": "Lüfter-Nachlaufzeit",
+        "state": {
+          "off": "Aus",
+          "5_min": "5 Minuten",
+          "15_min": "15 Minuten"
+        }
       }
     }
   },

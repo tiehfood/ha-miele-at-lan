@@ -20,6 +20,7 @@ import asyncio
 import binascii
 import json
 import logging
+import struct
 from typing import Any
 
 import aiohttp
@@ -42,10 +43,21 @@ from asyncmiele.utils.http_consts import (
 
 from .const import (
     DEVICE_ACTION_WAKE,
+    DOP1_LIGHTINGMODE_COOKING,
+    DOP1_LIGHTINGMODE_OFF,
+    DOP1_LUEFTERSTEUERUNG_OBJECT_ID,
+    DOP1_NACHLAUFZEIT_OBJECT_ID,
+    DOP1_REQUEST_TYPE_READ,
+    DOP1_REQUEST_TYPE_WRITE,
+    DOP1_SETTING_PF_OBJECT_ID,
+    DOP1_SWITCHLIGHT_LICHTQUELLE_MAIN,
+    DOP1_SWITCHLIGHT_OBJECT_ID,
+    DOP1_SWITCHLIGHT_STRUKTUR_VERSION,
     OPCODE_LIGHT_OFF,
     OPCODE_LIGHT_ON,
     OPCODE_SWITCH_OFF,
     OPCODE_SWITCH_ON,
+    RUN_ON_TIME_MINUTES,
     USER_REQUEST_LEAF,
     USER_REQUEST_UNIT,
 )
@@ -88,6 +100,102 @@ def build_user_request_payload(opcode: int) -> bytes:
     if not 0 <= opcode <= 0xFF:
         raise ValueError(f"opcode out of range: {opcode}")
     return _OVEN_REQ_PREFIX + bytes([opcode]) + _OVEN_REQ_SUFFIX
+
+
+# --- Dop1 request builders --------------------------------------------------
+# A Dop1 request is the hex string "{ObjectId}{RequestType}00{struct}", posted
+# as {"Request": ...} to /Devices/{fab}/DOP/. Kept pure (no I/O) so the wire
+# format can be tested without hardware — see tests/test_dop1_hood_payloads.py.
+# Layouts are documented per-object in const.py.
+
+
+def _dop1_request(object_id: str, request_type: str, section: bytes) -> str:
+    return f"{object_id}{request_type}00{section.hex().upper()}"
+
+
+def build_dop1_fan_level_request(level: int) -> str:
+    """ServiceDataExt_Lueftersteuerung write — set the hood fan to `level`."""
+    if not 0 <= level <= 5:
+        raise ValueError(f"fan level out of range: {level}")
+    section = bytes([0, 0xFF, level, 0])
+    return _dop1_request(
+        DOP1_LUEFTERSTEUERUNG_OBJECT_ID, DOP1_REQUEST_TYPE_WRITE, section
+    )
+
+
+def build_dop1_run_on_time_request(minutes: int) -> str:
+    """ServiceDataExt_Nachlaufzeit write — set the hood fan run-on time."""
+    if minutes not in RUN_ON_TIME_MINUTES:
+        raise ValueError(
+            f"run-on time must be one of {RUN_ON_TIME_MINUTES}: {minutes}"
+        )
+    return _dop1_request(
+        DOP1_NACHLAUFZEIT_OBJECT_ID, DOP1_REQUEST_TYPE_WRITE, bytes([0, minutes])
+    )
+
+
+def build_dop1_main_light_request(on: bool) -> str:
+    """SwitchLight_W write — switch the hood's main light on or off."""
+    section = bytearray(13)
+    section[0] = DOP1_SWITCHLIGHT_STRUKTUR_VERSION
+    section[1] = DOP1_SWITCHLIGHT_LICHTQUELLE_MAIN
+    section[2] = DOP1_LIGHTINGMODE_COOKING if on else DOP1_LIGHTINGMODE_OFF
+    # Rot/Gruen/Blau_Dimmwert (offsets 3, 5, 7) stay 0.
+    struct.pack_into(">H", section, 9, 0xFFFF if on else 0)  # WW_Dimmwert
+    struct.pack_into(">H", section, 11, 0)  # KW_Dimmwert
+    return _dop1_request(
+        DOP1_SWITCHLIGHT_OBJECT_ID, DOP1_REQUEST_TYPE_WRITE, bytes(section)
+    )
+
+
+def build_dop1_setting_pf_write_request(pf_id: int, value: int) -> str:
+    """Setting_PF_Schreiben_BE — write a Programmierfunktion value."""
+    if not 0 <= pf_id <= 0xFFFF:
+        raise ValueError(f"PF id out of range: {pf_id}")
+    if not 0 <= value <= 0xFFFFFFFF:
+        raise ValueError(f"PF value out of range: {value}")
+    section = bytearray(7)
+    struct.pack_into(">H", section, 1, pf_id)
+    struct.pack_into(">I", section, 3, value)
+    return _dop1_request(
+        DOP1_SETTING_PF_OBJECT_ID, DOP1_REQUEST_TYPE_WRITE, bytes(section)
+    )
+
+
+def build_dop1_setting_pf_read_request(pf_id: int) -> str:
+    """Setting_PF_Lesen_BE — ask for a Programmierfunktion's current value."""
+    if not 0 <= pf_id <= 0xFFFF:
+        raise ValueError(f"PF id out of range: {pf_id}")
+    section = bytearray(3)
+    struct.pack_into(">H", section, 1, pf_id)
+    return _dop1_request(
+        DOP1_SETTING_PF_OBJECT_ID, DOP1_REQUEST_TYPE_READ, bytes(section)
+    )
+
+
+def parse_dop1_setting_pf_value(response_hex: str, pf_id: int) -> int | None:
+    """Pull the `Wert` (U32) out of a Setting_PF read response.
+
+    The response carries a framing prefix (object id + message type) whose
+    exact width isn't pinned down, so instead of assuming an offset we locate
+    the echoed PF_ID and read the U32 that follows it. To avoid matching the
+    same two bytes somewhere inside the framing, a candidate only counts if
+    it sits on a byte boundary and the full 12 trailing bytes of the read
+    section (Wert + Min + Max) still fit.
+
+    Returns None when the value isn't locatable — callers treat that as
+    "this appliance doesn't expose this setting".
+    """
+    digits = response_hex.strip().upper()
+    if len(digits) % 2:  # not whole bytes — not something we can index into
+        return None
+    needle = f"{pf_id & 0xFFFF:04X}"
+    start = 0
+    while (idx := digits.find(needle, start)) != -1:
+        if idx % 2 == 0 and idx + 4 + 24 <= len(digits):
+            return int(digits[idx + 4 : idx + 12], 16)
+        start = idx + 2
+    return None
 
 
 async def _patched_request_bytes(
@@ -354,6 +462,90 @@ class MieleLanClient:
 
     async def switch_off(self) -> None:
         await self.write_user_request(OPCODE_SWITCH_OFF)
+
+    # --- legacy Dop1 writes (hood ventilation / light / settings) -----------
+
+    async def _dop1_post(self, request: str, *, what: str) -> bytes:
+        """POST a signed Dop1 request to /DOP/ and return the decrypted body.
+
+        HTTP 400 is the firmware's way of rejecting a no-op (re-asserting the
+        value the appliance already holds), the same convention `_put_state`
+        already tolerates for /State writes. An automation re-sending the
+        current fan level shouldn't surface as an error, so treat it as
+        success with an empty body.
+        """
+        try:
+            _, raw = await self._client._request_bytes(
+                "POST",
+                f"/Devices/{self._route}/DOP/",
+                body={"Request": request},
+                allowed_status=(200, 204),
+            )
+            return raw or b""
+        except ResponseError as exc:
+            if exc.status_code == 400:
+                _LOGGER.debug("%s: Dop1 %r returned 400 (likely no-op)", what, request)
+                return b""
+            raise HomeAssistantError(
+                f"{what} failed (HTTP {exc.status_code})."
+            ) from exc
+
+    async def set_fan_level(self, level: int) -> None:
+        """Set the hood's ventilation level (0 = off, 1-3, 4 = boost).
+
+        Hood-only, and only on ProtocolVersion==2 appliances — the same gate
+        the official app applies (see const.py). Returns as soon as the
+        appliance acks: turning on takes a few seconds to show up in
+        /State.VentilationStep while the motor spins up, and the push channel
+        delivers that update when it lands.
+        """
+        await self._dop1_post(
+            build_dop1_fan_level_request(level), what="Fan level write"
+        )
+
+    async def set_fan_run_on_time(self, minutes: int) -> None:
+        """Set the hood fan's run-on time (Nachlaufzeit) in minutes."""
+        await self._dop1_post(
+            build_dop1_run_on_time_request(minutes), what="Fan run-on time write"
+        )
+
+    async def set_main_light_dop1(self, on: bool) -> None:
+        """Switch the hood's main light via Dop1 SwitchLight_W.
+
+        Same result as `light_on()`/`light_off()` but much faster to apply on
+        hood firmware; callers keep the /State path as a fallback.
+        """
+        await self._dop1_post(
+            build_dop1_main_light_request(on), what="Main-light write"
+        )
+
+    async def write_setting_pf(self, pf_id: int, value: int) -> None:
+        """Write a Programmierfunktion setting via the generic Dop1 1201 object."""
+        await self._dop1_post(
+            build_dop1_setting_pf_write_request(pf_id, value),
+            what=f"Setting {pf_id} write",
+        )
+
+    async def read_setting_pf(self, pf_id: int) -> int | None:
+        """Read a Programmierfunktion setting's current value.
+
+        Returns None when the appliance doesn't answer with a value for this
+        setting, which is how callers detect an unsupported one.
+        """
+        raw = await self._dop1_post(
+            build_dop1_setting_pf_read_request(pf_id), what=f"Setting {pf_id} read"
+        )
+        if not raw:
+            return None
+        # The device answers with JSON {"Response": "<hex>"}; fall back to
+        # treating the body itself as the section if that shape ever changes.
+        try:
+            parsed = json.loads(raw.decode("utf-8", errors="replace"))
+            response_hex = parsed.get("Response", "") if isinstance(parsed, dict) else ""
+        except json.JSONDecodeError:
+            response_hex = raw.hex()
+        _LOGGER.debug("setting %d read response: %s", pf_id, response_hex)
+        return parse_dop1_setting_pf_value(response_hex, pf_id)
 
     # Cooling-family target-temperature writes are not supported via the LAN
     # protocol — see custom_components/miele_lan/climate.py for the RE notes.

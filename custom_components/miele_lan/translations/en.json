@@ -2075,6 +2075,15 @@
       },
       "plate_6_duration_minutes": {
         "name": "Cooking zone 6 duration"
+      },
+      "ventilation_step": {
+        "name": "Ventilation step"
+      },
+      "grease_filter_grade": {
+        "name": "Grease filter saturation"
+      },
+      "charcoal_filter_grade": {
+        "name": "Charcoal filter saturation"
       }
     },
     "binary_sensor": {
@@ -2167,6 +2176,31 @@
       },
       "stop_program": {
         "name": "Stop program"
+      }
+    },
+    "fan": {
+      "ventilation": {
+        "name": "Ventilation",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "1": "Level 1",
+              "2": "Level 2",
+              "3": "Level 3",
+              "boost": "Boost"
+            }
+          }
+        }
+      }
+    },
+    "select": {
+      "fan_run_on_time": {
+        "name": "Fan run-on time",
+        "state": {
+          "off": "Off",
+          "5_min": "5 minutes",
+          "15_min": "15 minutes"
+        }
       }
     }
   },

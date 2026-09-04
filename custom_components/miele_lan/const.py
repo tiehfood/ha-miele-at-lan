@@ -73,6 +73,68 @@ OPCODE_PROGRAM_ABORT = 0x37
 OPCODE_PROGRAM_FINALIZE = 0x38
 
 # ---------------------------------------------------------------------------
+# Legacy "Dop1" objects (hood ventilation, hood light, hood settings)
+# ---------------------------------------------------------------------------
+# Dop1 is a separate, older write mechanism from DOP2/GLOBAL_USER_REQ: a signed
+# `POST /Devices/{fab}/DOP/` carrying {"Request": "<hex>"}, where the hex is
+# "{ObjectId}{RequestType}00" followed by the object's own packed struct.
+#
+# It is the mechanism the official Miele app itself picks for hoods: its action
+# providers try [Dop1, OpCode, Dop2, Default] in order and the Dop1 variant's
+# `IsApplianceSpecificallySupported` is `ProtocolVersion == 2`, so on a
+# ProtocolVersion==2 hood the app never reaches the DOP2 path. That matters
+# here because GLOBAL_USER_REQ (leaf 2/1583) answers HTTP 404 outright on
+# these hoods — see `MieleLanClient.write_user_request`. Everything below was
+# recovered from the app's own action classes and then confirmed against real
+# hardware; `coordinator.hood_dop1_supported` mirrors the app's gate.
+DOP1_REQUEST_TYPE_READ = "01"
+DOP1_REQUEST_TYPE_WRITE = "02"
+
+# "ServiceDataExt_Lueftersteuerung" (ventilation control), from the app's
+# SetFanPowerLevelBaseAction. 4-byte write section:
+#   [0] Struktur_Version  = 0
+#   [1] Luefterauswahl    = 0xFF (all/default fan)
+#   [2] Luefterstufe      = 0..5 (FanPowerLevel: Off, 1, 2, 3, Booster, Interval)
+#   [3] Luefterleistung   = 0
+# Confirmed live: turning ON takes ~4s before /State.VentilationStep reflects
+# it (motor spin-up); turning OFF is near-instant (<1s). No keep-alive needed.
+DOP1_LUEFTERSTEUERUNG_OBJECT_ID = "8E01"
+
+# "ServiceDataExt_Nachlaufzeit" — fan run-on time, from SetFanRunOnTimeBaseAction.
+# 2-byte write section: [0] Struktur_Version = 0, [1] Nachlaufzeit in minutes.
+# The app itself only offers the discrete RunOnTimeLevel values below.
+DOP1_NACHLAUFZEIT_OBJECT_ID = "8E06"
+RUN_ON_TIME_MINUTES: tuple[int, ...] = (0, 5, 15)
+
+# "SwitchLight_W" — the hood's main cavity light, from the app's
+# LightingDop1Actions / ToggleLightSourceAsync(MainLightsource, ...).
+# 13-byte write section, all U16s big-endian:
+#   [0]     Struktur_Version = 2 (VersionEnum.Version_2_BE)
+#   [1]     Lichtquelle      = 1 (TypeLightSource.Licht_Kochfeld_ — main light)
+#   [2]     Betriebszustand  = LightingMode: 4 (CookingMode) on, 0 (Off) off
+#   [3:9]   Rot/Gruen/Blau_Dimmwert = 0
+#   [9:11]  WW_Dimmwert      = 0xFFFF when on, 0 when off
+#   [11:13] KW_Dimmwert      = 0
+# Worth having alongside the plain `PUT /State {"Light":1|2}` path because it
+# applies far faster on this firmware — measured ~0.8s vs ~4.9s to turn on.
+DOP1_SWITCHLIGHT_OBJECT_ID = "1400"
+DOP1_SWITCHLIGHT_STRUKTUR_VERSION = 2
+DOP1_SWITCHLIGHT_LICHTQUELLE_MAIN = 1
+DOP1_LIGHTINGMODE_OFF = 0
+DOP1_LIGHTINGMODE_COOKING = 4
+
+# Generic "Programmierfunktion" settings object (Setting_PF_Lesen/Schreiben_BE).
+# One object id for both directions, distinguished by the request-type byte:
+#   write section: [0] Version = 0, [1:3] PF_ID (U16 BE), [3:7] Wert (U32 BE)
+#   read  request: [0] Version = 0, [1:3] PF_ID (U16 BE)
+#   read  section: [0] Version, [1:3] PF_ID, [3:7] Wert, [7:11] Min, [11:15] Max
+DOP1_SETTING_PF_OBJECT_ID = "1201"
+
+# Hood Programmierfunktion ids (ProgrammierfunktionEnum; DA_* = Dunstabzug).
+PF_DA_FETTFILTER_GRENZE_AKTUELL = 40010   # current grease-filter saturation grade
+PF_DA_KOHLEFILTER_GRENZE_AKTUELL = 40011  # current charcoal-filter saturation grade
+
+# ---------------------------------------------------------------------------
 # Appliance taxonomy
 # ---------------------------------------------------------------------------
 # Mirror of HA core `miele.const.MieleAppliance`, which itself mirrors the
