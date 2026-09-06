@@ -2,7 +2,9 @@
 
 Push lands via `push_listener.MielePushListener.on_push` and gets dispatched
 here through `apply_push()`. Polling on a 60s cadence reconciles drift (lost
-pushes, listener restarts, devices that don't enrol for some reason).
+pushes, listener restarts, devices that don't enrol for some reason). Devices
+that never actually receive push (see `polling.py`) get a faster poll cadence
+while a programme is running, reverting to 60s once idle.
 
 One coordinator per device; the integration spawns N coordinators per
 household.
@@ -28,15 +30,15 @@ from .const import (
     PF_DA_FETTFILTER_GRENZE_AKTUELL,
     PF_DA_KOHLEFILTER_GRENZE_AKTUELL,
     MieleAppliance,
+    is_idle_state,
 )
 from .dop2 import parse_global_device_context, parse_hours_of_operation
 from .enrollment import EnrolledDevice
+from .polling import POLL_FALLBACK_INTERVAL, decide_poll_interval
 from .push_listener import PushEvent
 
 _LOGGER = logging.getLogger(__name__)
 
-POLL_FALLBACK_INTERVAL = 60  # seconds — slower than the active poll we used to do,
-                             # because push handles the real-time work.
 DOP2_REFRESH_INTERVAL = 600  # seconds — hours-of-operation barely changes; we
                              # only need to refresh ~once every 10 minutes.
 WLAN_REFRESH_INTERVAL = 300  # seconds — RSSI/signal-percentage drift slowly;
@@ -218,7 +220,30 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
             await self._maybe_refresh_hood_filters()
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(str(err)) from err
+        self._apply_adaptive_poll_interval()
         return self._data
+
+    def _apply_adaptive_poll_interval(self) -> None:
+        """Speed up polling for appliances push never actually reaches.
+
+        `push_mode == "push:active"` means we've genuinely received at
+        least one push, not merely that SuperVision/Subscriptions enrolled
+        — that's the distinction that matters here, since some appliances
+        enrol successfully but never deliver a real push (the reason this
+        adaptive cadence exists at all). Idle appliances have nothing to
+        catch either way, so they stay on the slow interval regardless.
+        """
+        is_push_active = self.push_mode == "push:active"
+        is_idle = is_idle_state(self._data.state)
+        new_interval = decide_poll_interval(is_push_active=is_push_active, is_idle=is_idle)
+        current_interval = self.update_interval.total_seconds()
+        if new_interval == current_interval:
+            return
+        _LOGGER.debug(
+            "[%s] poll interval %ss -> %ss (push_active=%s, idle=%s, last_push_at=%s)",
+            self.fab, current_interval, new_interval, is_push_active, is_idle, self._last_push_at,
+        )
+        self.update_interval = timedelta(seconds=new_interval)
 
     async def _maybe_refresh_wlan(self) -> None:
         """Refresh /WLAN/ on a slow cadence, and immediately when data is absent.

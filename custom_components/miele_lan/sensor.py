@@ -31,11 +31,11 @@ from .const import (
     DISHWASHER_FAMILY,
     DOMAIN,
     HOB_FAMILY,
-    IDLE_STATUSES,
     LAUNDRY_FAMILY,
     OVEN_FAMILY,
     WINE_FAMILY,
     MieleAppliance,
+    is_idle_state,
 )
 from .coordinator import MieleLanCoordinator
 from .entity import MieleLanEntity
@@ -134,14 +134,7 @@ def _enum_option(state: dict[str, Any], key: str, labels: dict[int, str]) -> str
     return labels.get(v, "unknown")
 
 
-def _is_idle(state: dict[str, Any]) -> bool:
-    """The local /State endpoint keeps the last ProgramID/Phase/Time cached
-    until the next cycle starts. The official Miele app gates display on the
-    device's Status code — same gate we apply here. Idle = no meaningful
-    program info to show.
-    """
-    s = state.get("Status")
-    return not isinstance(s, int) or s in IDLE_STATUSES
+_is_idle = is_idle_state
 
 
 def _gated_enum(key: str, labels: dict[int, str]) -> Callable[[dict[str, Any]], Any]:

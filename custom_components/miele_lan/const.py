@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import IntEnum
+from typing import Any
 
 DOMAIN = "miele_lan"
 DEFAULT_NAME = "Miele@LAN"
@@ -23,6 +24,18 @@ ACTIVE_STATUSES = {3, 4, 5, 6, 7, 9}
 # hide for Off / On / Service / Default / Locked / NotConnected — the firmware
 # keeps the last ProgramID/ProgramPhase cached until the next cycle starts.
 IDLE_STATUSES = {1, 2, 8, 12, 144, 145, 255}
+
+
+def is_idle_state(state: dict[str, Any]) -> bool:
+    """Whether `/State.Status` reflects an idle/no-programme appliance.
+
+    Shared by sensor.py (gates stale program/phase/time fields) and
+    coordinator.py (adaptive polling cadence) — both need the same
+    "nothing interesting is currently happening" gate.
+    """
+    status = state.get("Status")
+    return not isinstance(status, int) or status in IDLE_STATUSES
+
 
 CONF_GROUP_ID = "group_id"
 CONF_GROUP_KEY = "group_key"
