@@ -77,3 +77,57 @@ def test_placeholders_devices_lists_fab_and_reason_per_line() -> None:
     ]
     placeholders = er.issue_translation_placeholders(failed)
     assert placeholders["devices"] == f"{FAB}: {REASON}\n{OTHER_FAB}: {OTHER_REASON}"
+
+
+# ------------------------------------------------------- refine_failure_reason
+OUR_GROUP = "AABBCCDDEEFF00112233445566778899"
+OTHER_GROUP = "112233445566778899AABBCCDDEEFF00"
+
+
+def test_refine_not_found_over_mdns_keeps_original_reason() -> None:
+    reason = er.refine_failure_reason(
+        REASON, advertised_group=None, our_group=OUR_GROUP
+    )
+    assert reason == REASON
+
+
+def test_refine_empty_group_means_uncommissioned() -> None:
+    reason = er.refine_failure_reason(
+        REASON, advertised_group="", our_group=OUR_GROUP
+    )
+    assert reason == (
+        "appliance is not commissioned into any household — reset "
+        "Miele@home on the appliance, then reconnect it in the Miele app"
+    )
+
+
+def test_refine_mismatched_group_names_the_other_household() -> None:
+    reason = er.refine_failure_reason(
+        REASON, advertised_group=OTHER_GROUP, our_group=OUR_GROUP
+    )
+    assert reason == (
+        f"appliance belongs to household {OTHER_GROUP}, but this entry is {OUR_GROUP}"
+    )
+
+
+def test_refine_matching_group_keeps_original_reason() -> None:
+    reason = er.refine_failure_reason(
+        REASON, advertised_group=OUR_GROUP, our_group=OUR_GROUP
+    )
+    assert reason == REASON
+
+
+def test_refine_matching_group_is_case_insensitive() -> None:
+    reason = er.refine_failure_reason(
+        REASON, advertised_group=OUR_GROUP.lower(), our_group=OUR_GROUP
+    )
+    assert reason == REASON
+
+
+def test_refine_mismatched_group_reason_is_uppercased() -> None:
+    reason = er.refine_failure_reason(
+        REASON, advertised_group=OTHER_GROUP.lower(), our_group=OUR_GROUP
+    )
+    assert reason == (
+        f"appliance belongs to household {OTHER_GROUP}, but this entry is {OUR_GROUP}"
+    )

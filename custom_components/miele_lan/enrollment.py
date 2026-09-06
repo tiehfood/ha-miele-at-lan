@@ -25,7 +25,7 @@ from dataclasses import dataclass
 import aiohttp
 
 from .api import MieleLanClient
-from .enrollment_report import FailedDevice
+from .enrollment_report import FailedDevice, refine_failure_reason
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -370,7 +370,106 @@ async def enroll_all(
             enrolled.append(result)
         else:
             failed.append(result)
+    if failed:
+        failed = await _refine_failure_reasons(
+            failed, our_group_id=group_id_hex, zeroconf=resolver.zeroconf
+        )
     return EnrollmentResult(enrolled=enrolled, failed=failed)
+
+
+async def _refine_failure_reasons(
+    failed: list[FailedDevice],
+    *,
+    our_group_id: str,
+    zeroconf: Any | None,
+) -> list[FailedDevice]:
+    """One mDNS sweep to name the real cause behind generic failure reasons.
+
+    Best-effort: any trouble here must not break setup — appliances just
+    keep their original (correct, if less specific) reason.
+    """
+    try:
+        groups_by_hostname = await _mdns_groups_by_hostname(zeroconf=zeroconf)
+    except Exception as err:
+        _LOGGER.debug("mDNS sweep for failure-reason refinement failed: %s", err)
+        return failed
+    if not groups_by_hostname:
+        return failed
+
+    from .push_listener import synthetic_mac_hostname
+
+    refined: list[FailedDevice] = []
+    for f in failed:
+        hostname = synthetic_mac_hostname(f.fab).rstrip(".").lower()
+        advertised_group = groups_by_hostname.get(hostname)
+        reason = refine_failure_reason(
+            f.reason, advertised_group=advertised_group, our_group=our_group_id
+        )
+        refined.append(f if reason == f.reason else FailedDevice(fab=f.fab, reason=reason))
+    return refined
+
+
+async def _mdns_groups_by_hostname(
+    *,
+    timeout: float = 4.0,
+    zeroconf: Any | None = None,
+) -> dict[str, str]:
+    """One mDNS browse — `{hostname.lower(): group}` for every
+    `_mieleathome._tcp.local.` service currently visible on the LAN.
+
+    Shares the browse across all failed devices instead of resolving one at
+    a time, and reuses HA's shared zeroconf instance when given (same reason
+    as `DeviceIpResolver` — avoid a competing `AsyncZeroconf`).
+    """
+    try:
+        from zeroconf import IPVersion, ServiceStateChange
+        from zeroconf.asyncio import AsyncServiceBrowser, AsyncZeroconf
+    except ImportError:
+        return {}
+
+    hostnames: dict[str, str] = {}
+    owns_zc = zeroconf is None
+    zc = zeroconf if zeroconf is not None else AsyncZeroconf(ip_version=IPVersion.V4Only)
+    pending: list[asyncio.Task] = []
+
+    async def _resolve(service_type: str, name: str) -> None:
+        info = await zc.async_get_service_info(service_type, name, timeout=2000)
+        if info is None or not info.server:
+            return
+        hostnames[info.server.rstrip(".").lower()] = _decode_txt_group(info)
+
+    def _on_state(zeroconf, service_type, name, state_change):  # type: ignore[no-untyped-def]
+        if state_change is ServiceStateChange.Added:
+            pending.append(asyncio.create_task(_resolve(service_type, name)))
+
+    browser = AsyncServiceBrowser(
+        zc.zeroconf, ["_mieleathome._tcp.local."], handlers=[_on_state]
+    )
+    try:
+        await asyncio.sleep(timeout)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+    finally:
+        await browser.async_cancel()
+        if owns_zc:
+            await zc.async_close()
+
+    return hostnames
+
+
+def _decode_txt_group(info: Any) -> str:
+    """Decode the `group=` TXT value from a resolved zeroconf ServiceInfo.
+
+    Miele's TXT record values arrive as bytes or str depending on the
+    zeroconf library version — this is the one decode dance, shared by
+    every mDNS helper in this module that needs `group=`.
+    """
+    props = {
+        (k.decode("ascii", errors="ignore") if isinstance(k, bytes) else k):
+        (v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v)
+        for k, v in (info.properties or {}).items()
+    }
+    return (props.get("group") or "").upper()
 
 
 class DeviceIpResolver:
@@ -396,6 +495,11 @@ class DeviceIpResolver:
         # warning and prevents the two from contesting the same UDP socket on
         # restart-heavy paths (issue #2).
         self._zc: Any | None = zeroconf
+
+    @property
+    def zeroconf(self) -> Any | None:
+        """The shared `AsyncZeroconf` instance, if one was given at construction."""
+        return self._zc
 
     def remember(self, fab: str, ip: str) -> None:
         self._cache[fab] = ip
@@ -484,12 +588,7 @@ async def mdns_household_ids(
         info = await zc.async_get_service_info(service_type, name, timeout=2000)
         if info is None:
             return
-        props = {
-            (k.decode("ascii", errors="ignore") if isinstance(k, bytes) else k):
-            (v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v)
-            for k, v in (info.properties or {}).items()
-        }
-        group = (props.get("group") or "").upper()
+        group = _decode_txt_group(info)
         if group:
             groups.add(group)
 
