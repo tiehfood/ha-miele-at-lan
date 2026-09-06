@@ -71,6 +71,8 @@ Copy `custom_components/miele_lan/` into your HA config (final path: `<config>/c
 
 For factory-fresh appliances, run `python tools/miele_lan_provision.py` on your laptop first to commission them — this writes a new `GroupID`/`GroupKey` and binds the appliance to your LAN.
 
+**Warning: the appliance does not validate commissioning payloads.** An empty `GroupKey` and a `GroupID` of `0` are accepted with `200 OK`, and the appliance then considers itself commissioned — every later write of the real keys is refused with `403 Forbidden`, with no way back over the LAN; recovery is only on the appliance itself, via settings menu → **Miele@home** → reset, then reconnect in the Miele app. Use `tools/miele_lan_provision.py`, which validates key lengths before sending — a hand-rolled `curl` or script does not, and the appliance will not catch the mistake for you.
+
 ### Supported countries (cloud pairing)
 
 Cloud pairing works for every sales company Miele's MAP gateway serves — 49 at the time of
@@ -125,6 +127,17 @@ dns-sd -B _mieleathome._tcp local.
 If nothing appears, your network is dropping the multicast — fix that before going further. Common culprits: IGMP-snooping on a managed switch with no IGMP querier, a VLAN ACL between HA and the appliance subnet, an mDNS-blocking firewall rule, or HA running in a Docker bridge (use `network_mode: host`).
 
 **Setup fails with "household … has no appliances"?** Check the log for a second line naming a *different* household. Miele's cloud only hands over the key for the household your account currently owns; if your appliances were commissioned into an earlier one — an app reinstall or a re-pair can do this — the two no longer match, and the cloud's household comes back empty. The Miele app keeps working because it holds the LAN key itself. Fix it by re-pairing the appliances in the Miele app so they join the current household, or by using **Paste household credentials** if you can obtain the GroupKey for the group the appliances actually advertise. If instead the log says no Miele appliance answered mDNS *at all*, it is a network problem — see above.
+
+**One appliance is missing while others in the same household work fine?** Since v1.10.1 the integration raises a **repair issue** naming the appliance it could not enrol and states this cause directly when it detects it, so check there first. The underlying problem is usually that the appliance was never fully commissioned into the household — an appliance with no household group cannot verify a signed request, so a signed `GET /Devices/` to it returns `404`, which looks like a wrong key but isn't. The fastest manual check is mDNS: compare the `_mieleathome._tcp` TXT records of a working appliance against the missing one.
+
+```sh
+# Home Assistant OS / Debian / most Linux
+avahi-browse -rt _mieleathome._tcp
+# macOS
+dns-sd -B _mieleathome._tcp local.
+```
+
+A commissioned appliance advertises a non-empty `group=<household id>`; an uncommissioned one advertises `group=` with nothing after it. Fix it the same way as above: appliance settings menu → **Miele@home** → reset, then reconnect it in the Miele app so it joins the household.
 
 **Push not firing (sensors only update every 30 s)?** Verify `Mobile Controllable` is on at the appliance, and that HA's listener port (default 18082) is reachable from the appliance subnet. Look for `push:active` in the diagnostic Push State sensor.
 
