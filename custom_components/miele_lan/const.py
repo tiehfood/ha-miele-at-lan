@@ -8,13 +8,6 @@ from typing import Any
 DOMAIN = "miele_lan"
 DEFAULT_NAME = "Miele@LAN"
 DEFAULT_TIMEOUT = 10.0
-DEFAULT_POLL_INTERVAL = 30  # seconds — fallback when state is unknown
-ACTIVE_POLL_INTERVAL = 1   # seconds — when oven is running / state is "interesting"
-IDLE_POLL_INTERVAL = 30    # seconds — when oven is Off
-# Status values that indicate "interesting" — keep polling fast.
-# 1 = Off, 2 = StandBy, 3 = Programmed, 4 = WaitingToStart, 5 = Running,
-# 6 = Paused, 7 = EndProgrammed, 8 = Failure, 9 = Programming.
-ACTIVE_STATUSES = {3, 4, 5, 6, 7, 9}
 
 # Status values where program/phase/time fields are stale and should be hidden
 # from the user. Mirrors the official Miele app's gating (RE'd from
