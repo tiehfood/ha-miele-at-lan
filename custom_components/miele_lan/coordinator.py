@@ -36,6 +36,7 @@ from .dop2 import parse_global_device_context, parse_hours_of_operation
 from .enrollment import EnrolledDevice
 from .polling import POLL_FALLBACK_INTERVAL, decide_poll_interval
 from .push_listener import PushEvent
+from .state_debug_log import render_state_for_log
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -197,6 +198,10 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         try:
             state = await self.client.get_state()
             self._data.state = dict(state.raw_state)
+            _LOGGER.debug(
+                "[%s] polled /State: %s",
+                self.fab, render_state_for_log(self._data.state),
+            )
             if not self._ident_loaded:
                 ident = await self._fetch_full_ident()
                 self._data.ident = ident
@@ -432,6 +437,10 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 _LOGGER.info(
                     "[%s] push merged %d field(s) into /State; changed=%s",
                     self.fab, len(event.content), list(changed.keys()),
+                )
+                _LOGGER.debug(
+                    "[%s] push /State content: %s",
+                    self.fab, render_state_for_log(event.content),
                 )
                 merged = True
             else:
