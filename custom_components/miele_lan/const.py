@@ -283,6 +283,26 @@ POWERABLE_FAMILY: tuple[MieleAppliance, ...] = (
 )
 
 
+def wants_power_switch(device_type: MieleAppliance, *, hood_dop1_supported: bool) -> bool:
+    """Whether `device_type` should get the DOP2 power switch entity.
+
+    Every other POWERABLE_FAMILY member accepts the switch's DOP2 write
+    (leaf 2/1583). Dop1-capable hoods (ProtocolVersion 2) are the one
+    exception: GLOBAL_USER_REQ answers 404 on them outright (see the
+    DOP1_* leaf comment above), and the fan entity already covers on/off
+    via `set_fan_level(0)` — a second, permanently-broken entity would
+    only confuse users. Non-Dop1 hoods (ProtocolVersion 3/4) get no fan
+    entity at all, and we have no evidence either way on whether they
+    accept the DOP2 write, so they keep the switch rather than lose their
+    only remaining power control.
+    """
+    if device_type not in POWERABLE_FAMILY:
+        return False
+    if device_type is MieleAppliance.HOOD:
+        return not hood_dop1_supported
+    return True
+
+
 # Known-good DOP2 leaves on the H7560BP, per protocol_findings memory.
 LEAF_DEVICE_COMBINED_STATE = (2, 1586)   # 24 B — modern
 LEAF_DEVICE_COMBINED_LEGACY = (2, 256)   # 232 B — deprecated alias

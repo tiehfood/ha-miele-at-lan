@@ -1,7 +1,8 @@
 """Miele@LAN switches — per-device-type filtered.
 
 * **Power** (oven-family / dishwasher / coffee-system / etc.) maps
-  `Status != 1 (Off)` ↔ DOP2 SWITCH_ON / SWITCH_OFF opcodes.
+  `Status != 1 (Off)` ↔ DOP2 SWITCH_ON / SWITCH_OFF opcodes. Dop1-capable
+  hoods are excluded — see `const.wants_power_switch`.
 
 Cooling-family SuperCool/SuperFreeze are NOT switches — see binary_sensor.py.
 Confirmed 2026-05-22: the K7000 / EK057* fridge firmware blocks LAN writes
@@ -33,6 +34,7 @@ from .const import (
     DOMAIN,
     POWERABLE_FAMILY,
     MieleAppliance,
+    wants_power_switch,
 )
 from .coordinator import MieleLanCoordinator
 from .entity import MieleLanEntity
@@ -78,7 +80,9 @@ async def async_setup_entry(
     for coord in coordinators.values():
         dt = coord.device_type
         for d in SWITCH_TYPES:
-            if dt in d.types:
+            if dt in d.types and wants_power_switch(
+                dt, hood_dop1_supported=coord.hood_dop1_supported
+            ):
                 entities.append(MieleLanSwitch(coord, d.description))
     async_add_entities(entities)
 
