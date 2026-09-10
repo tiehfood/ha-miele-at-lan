@@ -2170,6 +2170,18 @@
       },
       "stop_program": {
         "name": "Stop program"
+      },
+      "start_process": {
+        "name": "Start"
+      },
+      "stop_process": {
+        "name": "Stop (remote)"
+      },
+      "pause_process": {
+        "name": "Pause"
+      },
+      "resume_process": {
+        "name": "Resume"
       }
     },
     "fan": {
