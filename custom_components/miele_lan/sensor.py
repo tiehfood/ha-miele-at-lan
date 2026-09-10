@@ -225,9 +225,16 @@ def _temp_or_none(temps: Any, idx: int, *, divisor: int = 100) -> int | float | 
 
 
 def _minutes(field: Any) -> int | None:
-    """Convert /State.RemainingTime [h, m] → total minutes."""
+    """Convert /State.RemainingTime/ElapsedTime/StartTime to total minutes.
+
+    Accepts either [hours, minutes] or a plain int of minutes, depending on
+    appliance. Negative values (e.g. the -32768 sentinel used elsewhere in
+    /State) are not a meaningful duration and are treated as unsupported.
+    """
     if isinstance(field, list) and len(field) == 2 and all(isinstance(x, int) for x in field):
         return field[0] * 60 + field[1]
+    if isinstance(field, int) and not isinstance(field, bool) and field >= 0:
+        return field
     return None
 
 
