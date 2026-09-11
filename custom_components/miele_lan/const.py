@@ -30,6 +30,23 @@ def is_idle_state(state: dict[str, Any]) -> bool:
     return not isinstance(status, int) or status in IDLE_STATUSES
 
 
+def parse_minutes_field(field: Any) -> int | None:
+    """Convert /State.RemainingTime/ElapsedTime/StartTime to total minutes.
+
+    Accepts either [hours, minutes] or a plain int of minutes, depending on
+    appliance. Negative values (e.g. the -32768 sentinel used elsewhere in
+    /State) are not a meaningful duration and are treated as unsupported.
+
+    Shared by sensor.py (RemainingTime/ElapsedTime/StartTime sensors) and
+    api.py (the laundry Start precondition's "no delayed start" check).
+    """
+    if isinstance(field, list) and len(field) == 2 and all(isinstance(x, int) for x in field):
+        return field[0] * 60 + field[1]
+    if isinstance(field, int) and not isinstance(field, bool) and field >= 0:
+        return field
+    return None
+
+
 CONF_GROUP_ID = "group_id"
 CONF_GROUP_KEY = "group_key"
 CONF_ROUTE = "route"
@@ -47,21 +64,22 @@ STATIC_IPS_TEXT_FIELD = "static_ips_text"  # options-flow free-form fab=ip texta
 CONF_FLOW_KIND = "flow_kind"        # "cloud" vs "manual" (single-device legacy path)
 DEFAULT_HA_PUSH_PORT = 18082
 
-# /State action keys.
+# /State action keys. There is no Resume value — the app resumes a paused
+# programme by resending Start (1); see MieleLanClient.resume_process.
 DEVICE_ACTION_WAKE = 2
 PROCESS_ACTION_START = 1
 PROCESS_ACTION_STOP = 2
 PROCESS_ACTION_PAUSE = 3
-PROCESS_ACTION_RESUME = 6
 
-# Preconditions for a `ProcessAction` write (see MieleLanClient.send_process_action).
-# Sourced from the reference implementation's readiness gate (MieleRESTServer:
-# DeviceReadyToStart = Status==0x04, DeviceRemoteStartCapable = 15 in
-# RemoteEnable) and cross-checked against our own StateStatus[4] ==
-# "waiting_to_start" (enums.py) and REMOTE_LABELS[15] == "full" (sensor.py).
+# /State.Status values used by the per-family `ProcessAction` preconditions
+# (see api.check_process_action_precondition). Sourced from the
+# official app's own laundry gate (UserRequestsDopSource /
+# DeviceStateExtensions): Stop needs Status in {waiting_to_start, in_use};
+# Start needs Status == waiting_to_start, or Status == programmed with
+# mobile start on and no delayed start queued.
+STATUS_PROGRAMMED = 3
 STATUS_WAITING_TO_START = 4
-REMOTE_ENABLE_FULL_CONTROL_INDEX = 0
-REMOTE_ENABLE_FULL_CONTROL_VALUE = 15
+STATUS_IN_USE = 5
 
 # DOP2 GLOBAL_USER_REQ leaf — universal across oven, laundry, dishwasher.
 USER_REQUEST_UNIT = 2
@@ -229,15 +247,17 @@ CYCLE_FAMILY: tuple[MieleAppliance, ...] = (
     *OVEN_FAMILY, *LAUNDRY_FAMILY, *DISHWASHER_FAMILY,
 )
 
-# Devices that get the /State ProcessAction "stop" button (button.py:
-# stop_process). Deliberately excludes ovens: they already have a working
-# stop via the DOP2 GLOBAL_USER_REQ button (stop_program), and we have no
-# evidence the two mechanisms behave identically, so shipping both would
-# just leave an oven owner guessing which one to press. Laundry and
-# dishwasher are exactly the families this PUT /State path exists for —
-# appliances that have no DOP2 stop at all on firmware that blocks DOP2
-# writes outright.
-STOP_PROCESS_FAMILY: tuple[MieleAppliance, ...] = (
+# Devices that get the /State ProcessAction Start/Stop buttons (button.py:
+# start_process, stop_process). Mirrors what the official app actually
+# offers over `/State`: laundry's UserRequestsDopSource offers Start(1)/
+# Stop(2) this way, and the dishwasher's app UI offers Start/Stop too
+# (its wire path is native code we couldn't decompile, so not verified
+# to also go through `/State`). Ovens are deliberately excluded — DOP1
+# ovens hardcode Start as unavailable and
+# DOP2 ovens use DOP2 GLOBAL_USER_REQ requests instead (the existing
+# stop_program button), so a second, unproven `/State` Start/Stop pair
+# would just leave an oven owner guessing which button to press.
+START_STOP_PROCESS_FAMILY: tuple[MieleAppliance, ...] = (
     *LAUNDRY_FAMILY, *DISHWASHER_FAMILY,
 )
 

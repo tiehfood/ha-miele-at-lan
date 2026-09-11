@@ -1,9 +1,9 @@
-"""Tests for Start/Stop/Pause/Resume via PUT /State (issue #10, #16).
+"""Tests for Start/Stop/Pause/Resume via PUT /State (issue #10, #16, #43).
 
 No HA runtime, no network — same stub pattern as
 tests/test_write_user_request_errors.py. Covers both the wire payload
-(correct ProcessAction value, correct resource) and the precondition
-logic, which must be usable without a device or a coordinator.
+(correct ProcessAction value, correct resource) and the per-family
+precondition logic, which must be usable without a device or a coordinator.
 """
 
 import asyncio
@@ -24,9 +24,9 @@ from custom_components.miele_lan.api import (  # noqa: E402
 )
 from custom_components.miele_lan.const import (  # noqa: E402
     PROCESS_ACTION_PAUSE,
-    PROCESS_ACTION_RESUME,
     PROCESS_ACTION_START,
     PROCESS_ACTION_STOP,
+    MieleAppliance,
 )
 
 
@@ -56,7 +56,7 @@ def _run(coro):
         ("start_process", PROCESS_ACTION_START),
         ("stop_process", PROCESS_ACTION_STOP),
         ("pause_process", PROCESS_ACTION_PAUSE),
-        ("resume_process", PROCESS_ACTION_RESUME),
+        ("resume_process", PROCESS_ACTION_START),
     ],
 )
 def test_process_action_sends_correct_put_state(method_name: str, expected_action: int) -> None:
@@ -68,6 +68,19 @@ def test_process_action_sends_correct_put_state(method_name: str, expected_actio
     assert method == "PUT"
     assert resource == "/Devices/000000000000/State"
     assert body == {"ProcessAction": expected_action}
+
+
+def test_resume_sends_start_not_supercooling() -> None:
+    """v1.13.0 shipped ProcessAction 6 for Resume — that's
+
+    GLOBAL_USER_REQ_START_SUPERCOOLING (a fridge feature), not Resume. The
+    app resumes a paused programme by resending Start (1).
+    """
+    stub = _RecordingRawClient()
+    client = MieleLanClient(stub, route="000000000000")
+    _run(client.resume_process())
+    _, _, body = stub.calls[0]
+    assert body == {"ProcessAction": PROCESS_ACTION_START}
 
 
 def test_refusal_is_not_swallowed_as_success() -> None:
@@ -95,36 +108,165 @@ def test_500_does_not_assert_a_specific_cause() -> None:
     assert "panel" not in message.lower()
 
 
-# --- precondition (pure, no I/O) ---------------------------------------------
+# --- precondition: laundry ---------------------------------------------------
 
-def test_precondition_none_when_state_unknown() -> None:
-    assert check_process_action_precondition({}, PROCESS_ACTION_START) is None
+def test_laundry_precondition_none_when_state_unknown() -> None:
+    assert (
+        check_process_action_precondition({}, PROCESS_ACTION_START, MieleAppliance.WASHING_MACHINE)
+        is None
+    )
+    assert (
+        check_process_action_precondition({}, PROCESS_ACTION_STOP, MieleAppliance.WASHING_MACHINE)
+        is None
+    )
 
 
-def test_precondition_blocks_when_remote_control_disabled() -> None:
+def test_laundry_start_allowed_when_waiting_to_start() -> None:
+    state = {"RemoteEnable": [15, 0, 0], "Status": 4}
+    assert (
+        check_process_action_precondition(state, PROCESS_ACTION_START, MieleAppliance.WASHING_MACHINE)
+        is None
+    )
+
+
+def test_laundry_start_allowed_with_remote_enable_7() -> None:
+    """RemoteEnable[0]==7 ("enabled but not local") still has bit 0 set —
+
+    the app allows Start there just as it does at 15.
+    """
+    state = {"RemoteEnable": [7, 0, 0], "Status": 4}
+    assert (
+        check_process_action_precondition(state, PROCESS_ACTION_START, MieleAppliance.WASHING_MACHINE)
+        is None
+    )
+
+
+def test_laundry_start_allowed_when_programmed_with_mobile_start_and_no_delay() -> None:
+    state = {"RemoteEnable": [15, 0, 1], "Status": 3, "StartTime": 0}
+    assert (
+        check_process_action_precondition(state, PROCESS_ACTION_START, MieleAppliance.WASHING_MACHINE)
+        is None
+    )
+
+
+def test_laundry_start_refused_when_programmed_with_delayed_start() -> None:
+    state = {"RemoteEnable": [15, 0, 1], "Status": 3, "StartTime": [0, 30]}
+    message = check_process_action_precondition(
+        state, PROCESS_ACTION_START, MieleAppliance.WASHING_MACHINE
+    )
+    assert message == (
+        "Start is not available right now (Status=3, RemoteEnable=[15, 0, 1]). "
+        "Start works when a programme is waiting to start (Status 4), or is programmed "
+        "(Status 3) with Mobile start on and no delayed start."
+    )
+
+
+def test_laundry_start_refused_when_running() -> None:
+    state = {"RemoteEnable": [15, 0, 0], "Status": 5}
+    message = check_process_action_precondition(
+        state, PROCESS_ACTION_START, MieleAppliance.WASHING_MACHINE
+    )
+    assert message == (
+        "Start is not available right now (Status=5, RemoteEnable=[15, 0, 0]). "
+        "Start works when a programme is waiting to start (Status 4), or is programmed "
+        "(Status 3) with Mobile start on and no delayed start."
+    )
+
+
+def test_laundry_start_refused_when_remote_control_off() -> None:
     state = {"RemoteEnable": [0, 0, 0], "Status": 4}
-    message = check_process_action_precondition(state, PROCESS_ACTION_STOP)
-    assert message is not None
-    assert "RemoteEnable" in message
-    assert "[0, 0, 0]" in message
+    message = check_process_action_precondition(
+        state, PROCESS_ACTION_START, MieleAppliance.WASHING_MACHINE
+    )
+    assert message == "Remote control is off on this appliance (RemoteEnable=[0, 0, 0])."
 
 
-def test_precondition_blocks_start_when_not_waiting_to_start() -> None:
-    state = {"RemoteEnable": [15, 1, 1], "Status": 5}
-    message = check_process_action_precondition(state, PROCESS_ACTION_START)
-    assert message is not None
-    assert "Status=5" in message
+def test_laundry_stop_allowed_when_waiting_or_running() -> None:
+    for status in (4, 5):
+        state = {"RemoteEnable": [0, 0, 0], "Status": status}
+        assert (
+            check_process_action_precondition(state, PROCESS_ACTION_STOP, MieleAppliance.WASHING_MACHINE)
+            is None
+        )
 
 
-def test_precondition_does_not_apply_status_gate_to_stop() -> None:
-    """Status==4 ("waiting to start") is only documented as a Start gate."""
-    state = {"RemoteEnable": [15, 1, 1], "Status": 5}
-    assert check_process_action_precondition(state, PROCESS_ACTION_STOP) is None
+def test_laundry_stop_never_checks_remote_enable() -> None:
+    """Stop needs no RemoteEnable check at all — RemoteEnable[0]==0 must not
+
+    block it as long as Status is 4 or 5.
+    """
+    state = {"RemoteEnable": [0, 0, 0], "Status": 5}
+    assert (
+        check_process_action_precondition(state, PROCESS_ACTION_STOP, MieleAppliance.WASHING_MACHINE)
+        is None
+    )
 
 
-def test_precondition_passes_when_ready_to_start() -> None:
-    state = {"RemoteEnable": [15, 1, 1], "Status": 4}
-    assert check_process_action_precondition(state, PROCESS_ACTION_START) is None
+def test_laundry_stop_refused_when_not_waiting_or_running() -> None:
+    state = {"RemoteEnable": [15, 0, 0], "Status": 3}
+    message = check_process_action_precondition(
+        state, PROCESS_ACTION_STOP, MieleAppliance.WASHING_MACHINE
+    )
+    assert message == (
+        "Stop is not available right now (Status=3). Stop works while a "
+        "programme is waiting to start or running (Status 4 or 5)."
+    )
+
+
+# --- precondition: dishwasher -------------------------------------------------
+
+def test_dishwasher_start_refused_when_remote_control_off() -> None:
+    state = {"RemoteEnable": [0, 0, 0]}
+    message = check_process_action_precondition(
+        state, PROCESS_ACTION_START, MieleAppliance.DISHWASHER
+    )
+    assert message == "Remote control is off on this appliance (RemoteEnable=[0, 0, 0])."
+
+
+def test_dishwasher_pause_refused_when_remote_control_off() -> None:
+    state = {"RemoteEnable": [0, 0, 0]}
+    message = check_process_action_precondition(
+        state, PROCESS_ACTION_PAUSE, MieleAppliance.DISHWASHER
+    )
+    assert message == "Remote control is off on this appliance (RemoteEnable=[0, 0, 0])."
+
+
+def test_dishwasher_stop_never_refused() -> None:
+    state = {"RemoteEnable": [0, 0, 0]}
+    assert (
+        check_process_action_precondition(state, PROCESS_ACTION_STOP, MieleAppliance.DISHWASHER)
+        is None
+    )
+
+
+def test_dishwasher_start_allowed_when_remote_control_not_known_off() -> None:
+    for state in ({"RemoteEnable": [15, 0, 0]}, {"RemoteEnable": [7, 0, 0]}, {}):
+        assert (
+            check_process_action_precondition(state, PROCESS_ACTION_START, MieleAppliance.DISHWASHER)
+            is None
+        )
+
+
+# --- missing / malformed fields never block ----------------------------------
+
+def test_missing_or_malformed_fields_never_block() -> None:
+    malformed_states = [
+        {},
+        {"RemoteEnable": "not-a-list"},
+        {"RemoteEnable": []},
+        {"RemoteEnable": [None, 0, 0]},
+        {"Status": "not-an-int"},
+    ]
+    for state in malformed_states:
+        for device_type in (MieleAppliance.WASHING_MACHINE, MieleAppliance.DISHWASHER):
+            for action in (PROCESS_ACTION_START, PROCESS_ACTION_STOP, PROCESS_ACTION_PAUSE):
+                assert check_process_action_precondition(state, action, device_type) is None
+
+
+def test_oven_gets_no_process_action_precondition() -> None:
+    state = {"RemoteEnable": [0, 0, 0], "Status": 5}
+    for action in (PROCESS_ACTION_START, PROCESS_ACTION_STOP, PROCESS_ACTION_PAUSE):
+        assert check_process_action_precondition(state, action, MieleAppliance.OVEN) is None
 
 
 # --- client wiring of the precondition ---------------------------------------
@@ -134,12 +276,20 @@ def test_client_blocks_locally_without_a_network_call() -> None:
     client = MieleLanClient(stub, route="000000000000")
     state = {"RemoteEnable": [0, 0, 0], "Status": 4}
     with pytest.raises(HomeAssistantError):
-        _run(client.start_process(state))
+        _run(client.start_process(device_type=MieleAppliance.WASHING_MACHINE, precondition_state=state))
     assert stub.calls == []
 
 
 def test_client_proceeds_when_precondition_state_is_missing() -> None:
     stub = _RecordingRawClient()
     client = MieleLanClient(stub, route="000000000000")
-    _run(client.start_process(None))
+    _run(client.start_process(device_type=MieleAppliance.WASHING_MACHINE, precondition_state=None))
+    assert len(stub.calls) == 1
+
+
+def test_client_proceeds_when_device_type_is_missing() -> None:
+    stub = _RecordingRawClient()
+    client = MieleLanClient(stub, route="000000000000")
+    state = {"RemoteEnable": [0, 0, 0], "Status": 4}
+    _run(client.start_process(device_type=None, precondition_state=state))
     assert len(stub.calls) == 1

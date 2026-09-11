@@ -34,12 +34,12 @@ from .const import (
     LAUNDRY_FAMILY,
     OVEN_FAMILY,
     PROCESS_ACTION_PAUSE,
-    PROCESS_ACTION_RESUME,
     PROCESS_ACTION_START,
     PROCESS_ACTION_STOP,
     WINE_FAMILY,
     MieleAppliance,
     is_idle_state,
+    parse_minutes_field as _minutes,
 )
 from .coordinator import MieleLanCoordinator
 from .entity import MieleLanEntity
@@ -119,7 +119,6 @@ PROCESS_ACTION_LABELS = {
     PROCESS_ACTION_START: "start",
     PROCESS_ACTION_STOP: "stop",
     PROCESS_ACTION_PAUSE: "pause",
-    PROCESS_ACTION_RESUME: "resume",
 }
 DEVICE_ACTION_LABELS = {0: "no_action", 1: "start_remote", 2: "wake_up", 3: "go_to_standby"}
 STANDBY_STATE_LABELS = {0: "not_in_standby", 1: "network_idle", 2: "deep_standby", 3: "going_to_standby"}
@@ -232,20 +231,6 @@ def _temp_or_none(temps: Any, idx: int, *, divisor: int = 100) -> int | float | 
     if not isinstance(v, int) or v == -32768:
         return None
     return v / divisor if divisor > 1 else v
-
-
-def _minutes(field: Any) -> int | None:
-    """Convert /State.RemainingTime/ElapsedTime/StartTime to total minutes.
-
-    Accepts either [hours, minutes] or a plain int of minutes, depending on
-    appliance. Negative values (e.g. the -32768 sentinel used elsewhere in
-    /State) are not a meaningful duration and are treated as unsupported.
-    """
-    if isinstance(field, list) and len(field) == 2 and all(isinstance(x, int) for x in field):
-        return field[0] * 60 + field[1]
-    if isinstance(field, int) and not isinstance(field, bool) and field >= 0:
-        return field
-    return None
 
 
 def _utc_iso_now_plus(minutes: int | None) -> str | None:

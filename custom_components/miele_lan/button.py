@@ -5,17 +5,16 @@ on/off representation as a switch / light.
   pull the device back to a remote-controllable state.
 * `stop_program`  — oven-family. Sends DOP2 STOP (no heat risk; cleanly
   ends a running program) via GLOBAL_USER_REQ.
-* `start_process`, `pause_process`, `resume_process` — cycle devices
-  (oven/laundry/dishwasher). Send `ProcessAction` via `PUT /State` instead
-  of DOP2 — the only control surface on appliances whose firmware blocks
-  DOP2 writes outright (HTTP 404 on every leaf). Ovens have no existing
-  start/pause/resume equivalent, so there's no duplication there.
-* `stop_process`  — laundry + dishwasher only (STOP_PROCESS_FAMILY), same
-  `PUT /State` mechanism. Deliberately excludes ovens: they already have a
-  working `stop_program`, we have no evidence the two stop mechanisms
-  behave identically, and a second unproven "Stop" would just leave an
-  oven owner guessing which button to press for no gain — see
-  `STOP_PROCESS_FAMILY` in const.py.
+* `start_process`, `stop_process` — laundry + dishwasher
+  (START_STOP_PROCESS_FAMILY). Send `ProcessAction` via `PUT /State`
+  instead of DOP2 — the only control surface on appliances whose firmware
+  blocks DOP2 writes outright (HTTP 404 on every leaf). Ovens are excluded:
+  DOP1 ovens hardcode Start as unavailable and DOP2 ovens use the existing
+  `stop_program` instead, mirroring exactly what the official app itself
+  offers over `/State` per appliance family.
+* `pause_process`, `resume_process` — dishwasher only. Resume has no
+  dedicated opcode; it resends Start (see `MieleLanClient.resume_process`).
+  Laundry's own `/State` source never offers Pause/Resume at all.
 """
 
 from __future__ import annotations
@@ -29,15 +28,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
-    CYCLE_FAMILY,
+    DISHWASHER_FAMILY,
     DOMAIN,
     OPCODE_STOP,
     OVEN_FAMILY,
     PROCESS_ACTION_PAUSE,
-    PROCESS_ACTION_RESUME,
     PROCESS_ACTION_START,
     PROCESS_ACTION_STOP,
-    STOP_PROCESS_FAMILY,
+    START_STOP_PROCESS_FAMILY,
     WAKEABLE_FAMILY,
     MieleAppliance,
 )
@@ -59,7 +57,9 @@ class MieleLanButtonDef:
 def _process_action_press(action: int) -> Callable[[MieleLanCoordinator], Awaitable[Any]]:
     async def press(coordinator: MieleLanCoordinator) -> None:
         state = coordinator.data.state if coordinator.data else None
-        await coordinator.client.send_process_action(action, precondition_state=state)
+        await coordinator.client.send_process_action(
+            action, device_type=coordinator.device_type, precondition_state=state
+        )
 
     return press
 
@@ -82,7 +82,7 @@ BUTTONS: tuple[MieleLanButtonDef, ...] = (
         ),
     ),
     MieleLanButtonDef(
-        types=CYCLE_FAMILY,
+        types=START_STOP_PROCESS_FAMILY,
         description=MieleLanButtonDescription(
             key="start_process",
             translation_key="start_process",
@@ -90,7 +90,7 @@ BUTTONS: tuple[MieleLanButtonDef, ...] = (
         ),
     ),
     MieleLanButtonDef(
-        types=STOP_PROCESS_FAMILY,
+        types=START_STOP_PROCESS_FAMILY,
         description=MieleLanButtonDescription(
             key="stop_process",
             translation_key="stop_process",
@@ -98,7 +98,7 @@ BUTTONS: tuple[MieleLanButtonDef, ...] = (
         ),
     ),
     MieleLanButtonDef(
-        types=CYCLE_FAMILY,
+        types=DISHWASHER_FAMILY,
         description=MieleLanButtonDescription(
             key="pause_process",
             translation_key="pause_process",
@@ -106,11 +106,11 @@ BUTTONS: tuple[MieleLanButtonDef, ...] = (
         ),
     ),
     MieleLanButtonDef(
-        types=CYCLE_FAMILY,
+        types=DISHWASHER_FAMILY,
         description=MieleLanButtonDescription(
             key="resume_process",
             translation_key="resume_process",
-            press_fn=_process_action_press(PROCESS_ACTION_RESUME),
+            press_fn=_process_action_press(PROCESS_ACTION_START),
         ),
     ),
 )
