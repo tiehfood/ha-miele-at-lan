@@ -58,7 +58,6 @@ from .const import (
     OPCODE_SWITCH_OFF,
     OPCODE_SWITCH_ON,
     PROCESS_ACTION_PAUSE,
-    PROCESS_ACTION_RESUME,
     PROCESS_ACTION_START,
     PROCESS_ACTION_STOP,
     REMOTE_ENABLE_FULL_CONTROL_INDEX,
@@ -500,7 +499,12 @@ class MieleLanClient:
         await self.send_process_action(PROCESS_ACTION_PAUSE, precondition_state=precondition_state)
 
     async def resume_process(self, precondition_state: dict[str, Any] | None = None) -> None:
-        await self.send_process_action(PROCESS_ACTION_RESUME, precondition_state=precondition_state)
+        """Resume a paused programme.
+
+        There is no Resume opcode — the app resumes by resending Start (1),
+        and so do we.
+        """
+        await self.send_process_action(PROCESS_ACTION_START, precondition_state=precondition_state)
 
     async def write_user_request(self, opcode: int) -> None:
         """Send a GLOBAL_USER_REQ opcode via DOP2 leaf 2/1583.

@@ -10,6 +10,8 @@ on/off representation as a switch / light.
   of DOP2 — the only control surface on appliances whose firmware blocks
   DOP2 writes outright (HTTP 404 on every leaf). Ovens have no existing
   start/pause/resume equivalent, so there's no duplication there.
+  `resume_process` has no dedicated opcode — it resends Start (1), same as
+  the official app (see `MieleLanClient.resume_process`).
 * `stop_process`  — laundry + dishwasher only (STOP_PROCESS_FAMILY), same
   `PUT /State` mechanism. Deliberately excludes ovens: they already have a
   working `stop_program`, we have no evidence the two stop mechanisms
@@ -34,7 +36,6 @@ from .const import (
     OPCODE_STOP,
     OVEN_FAMILY,
     PROCESS_ACTION_PAUSE,
-    PROCESS_ACTION_RESUME,
     PROCESS_ACTION_START,
     PROCESS_ACTION_STOP,
     STOP_PROCESS_FAMILY,
@@ -110,7 +111,7 @@ BUTTONS: tuple[MieleLanButtonDef, ...] = (
         description=MieleLanButtonDescription(
             key="resume_process",
             translation_key="resume_process",
-            press_fn=_process_action_press(PROCESS_ACTION_RESUME),
+            press_fn=_process_action_press(PROCESS_ACTION_START),
         ),
     ),
 )

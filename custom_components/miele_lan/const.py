@@ -47,12 +47,12 @@ STATIC_IPS_TEXT_FIELD = "static_ips_text"  # options-flow free-form fab=ip texta
 CONF_FLOW_KIND = "flow_kind"        # "cloud" vs "manual" (single-device legacy path)
 DEFAULT_HA_PUSH_PORT = 18082
 
-# /State action keys.
+# /State action keys. There is no Resume value — the app resumes a paused
+# programme by resending Start (1); see MieleLanClient.resume_process.
 DEVICE_ACTION_WAKE = 2
 PROCESS_ACTION_START = 1
 PROCESS_ACTION_STOP = 2
 PROCESS_ACTION_PAUSE = 3
-PROCESS_ACTION_RESUME = 6
 
 # Preconditions for a `ProcessAction` write (see MieleLanClient.send_process_action).
 # Sourced from the reference implementation's readiness gate (MieleRESTServer:

@@ -34,7 +34,6 @@ from .const import (
     LAUNDRY_FAMILY,
     OVEN_FAMILY,
     PROCESS_ACTION_PAUSE,
-    PROCESS_ACTION_RESUME,
     PROCESS_ACTION_START,
     PROCESS_ACTION_STOP,
     WINE_FAMILY,
@@ -119,7 +118,6 @@ PROCESS_ACTION_LABELS = {
     PROCESS_ACTION_START: "start",
     PROCESS_ACTION_STOP: "stop",
     PROCESS_ACTION_PAUSE: "pause",
-    PROCESS_ACTION_RESUME: "resume",
 }
 DEVICE_ACTION_LABELS = {0: "no_action", 1: "start_remote", 2: "wake_up", 3: "go_to_standby"}
 STANDBY_STATE_LABELS = {0: "not_in_standby", 1: "network_idle", 2: "deep_standby", 3: "going_to_standby"}

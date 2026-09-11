@@ -979,8 +979,7 @@
           "no_action": "Keine",
           "start": "Start",
           "stop": "Stopp",
-          "pause": "Pause",
-          "resume": "Fortsetzen"
+          "pause": "Pause"
         }
       },
       "device_action": {

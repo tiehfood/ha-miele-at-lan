@@ -1,4 +1,4 @@
-"""Tests for Start/Stop/Pause/Resume via PUT /State (issue #10, #16).
+"""Tests for Start/Stop/Pause/Resume via PUT /State (issue #10, #16, #43).
 
 No HA runtime, no network — same stub pattern as
 tests/test_write_user_request_errors.py. Covers both the wire payload
@@ -24,7 +24,6 @@ from custom_components.miele_lan.api import (  # noqa: E402
 )
 from custom_components.miele_lan.const import (  # noqa: E402
     PROCESS_ACTION_PAUSE,
-    PROCESS_ACTION_RESUME,
     PROCESS_ACTION_START,
     PROCESS_ACTION_STOP,
 )
@@ -56,7 +55,7 @@ def _run(coro):
         ("start_process", PROCESS_ACTION_START),
         ("stop_process", PROCESS_ACTION_STOP),
         ("pause_process", PROCESS_ACTION_PAUSE),
-        ("resume_process", PROCESS_ACTION_RESUME),
+        ("resume_process", PROCESS_ACTION_START),
     ],
 )
 def test_process_action_sends_correct_put_state(method_name: str, expected_action: int) -> None:
@@ -68,6 +67,19 @@ def test_process_action_sends_correct_put_state(method_name: str, expected_actio
     assert method == "PUT"
     assert resource == "/Devices/000000000000/State"
     assert body == {"ProcessAction": expected_action}
+
+
+def test_resume_sends_start_not_supercooling() -> None:
+    """v1.13.0 shipped ProcessAction 6 for Resume — that's
+
+    GLOBAL_USER_REQ_START_SUPERCOOLING (a fridge feature), not Resume. The
+    app resumes a paused programme by resending Start (1).
+    """
+    stub = _RecordingRawClient()
+    client = MieleLanClient(stub, route="000000000000")
+    _run(client.resume_process())
+    _, _, body = stub.calls[0]
+    assert body == {"ProcessAction": PROCESS_ACTION_START}
 
 
 def test_refusal_is_not_swallowed_as_success() -> None:
