@@ -43,6 +43,7 @@ from asyncmiele.utils.http_consts import (
 
 from .const import (
     DEVICE_ACTION_WAKE,
+    DISHWASHER_FAMILY,
     DOP1_LIGHTINGMODE_COOKING,
     DOP1_LIGHTINGMODE_OFF,
     DOP1_LUEFTERSTEUERUNG_OBJECT_ID,
@@ -53,6 +54,7 @@ from .const import (
     DOP1_SWITCHLIGHT_LICHTQUELLE_MAIN,
     DOP1_SWITCHLIGHT_OBJECT_ID,
     DOP1_SWITCHLIGHT_STRUKTUR_VERSION,
+    LAUNDRY_FAMILY,
     OPCODE_LIGHT_OFF,
     OPCODE_LIGHT_ON,
     OPCODE_SWITCH_OFF,
@@ -60,12 +62,14 @@ from .const import (
     PROCESS_ACTION_PAUSE,
     PROCESS_ACTION_START,
     PROCESS_ACTION_STOP,
-    REMOTE_ENABLE_FULL_CONTROL_INDEX,
-    REMOTE_ENABLE_FULL_CONTROL_VALUE,
     RUN_ON_TIME_MINUTES,
+    STATUS_IN_USE,
+    STATUS_PROGRAMMED,
     STATUS_WAITING_TO_START,
     USER_REQUEST_LEAF,
     USER_REQUEST_UNIT,
+    MieleAppliance,
+    parse_minutes_field,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -108,7 +112,78 @@ def build_user_request_payload(opcode: int) -> bytes:
     return _OVEN_REQ_PREFIX + bytes([opcode]) + _OVEN_REQ_SUFFIX
 
 
-def check_process_action_precondition(state: dict[str, Any], action: int) -> str | None:
+def _check_dishwasher_precondition(state: dict[str, Any], action: int) -> str | None:
+    """Dishwasher's own `RemoteEnable`/`Status` gate is native-only code we
+    can't decompile, so we only refuse Start/Pause/Resume when `RemoteEnable[0]`
+    is positively known to be 0. Stop is never refused locally — the app never
+    gates it either.
+    """
+    if action == PROCESS_ACTION_STOP:
+        return None
+    remote_enable = state.get("RemoteEnable")
+    if (
+        isinstance(remote_enable, list)
+        and remote_enable
+        and isinstance(remote_enable[0], int)
+        and remote_enable[0] == 0
+    ):
+        return f"Remote control is off on this appliance (RemoteEnable={remote_enable!r})."
+    return None
+
+
+def _check_laundry_precondition(state: dict[str, Any], action: int) -> str | None:
+    """Laundry's exact `/State`-based gate (`UserRequestsDopSource` /
+    `DeviceStateExtensions`). Pause/Resume don't exist on this family at all
+    (no button is wired for them), so this only ever sees Start/Stop.
+
+    Stop needs no `RemoteEnable` check whatsoever — only `Status` in
+    {waiting_to_start, in_use}. Start additionally needs remote control on
+    (`RemoteEnable[0]` bit 0), and while a programme is merely "programmed"
+    (not yet waiting), needs mobile start on (`RemoteEnable[2]` bit 0) with
+    no delayed start queued.
+    """
+    status = state.get("Status")
+    if action == PROCESS_ACTION_STOP:
+        if not isinstance(status, int) or status in (STATUS_WAITING_TO_START, STATUS_IN_USE):
+            return None
+        return (
+            f"Stop is not available right now (Status={status}). Stop works while a "
+            "programme is waiting to start or running (Status 4 or 5)."
+        )
+    if action != PROCESS_ACTION_START:
+        return None
+
+    remote_enable = state.get("RemoteEnable")
+    remote0 = remote_enable[0] if isinstance(remote_enable, list) and remote_enable else None
+    if isinstance(remote0, int) and not remote0 & 1:
+        return f"Remote control is off on this appliance (RemoteEnable={remote_enable!r})."
+
+    if not isinstance(status, int):
+        return None
+    if status == STATUS_WAITING_TO_START:
+        return None
+    if status == STATUS_PROGRAMMED:
+        remote2 = (
+            remote_enable[2]
+            if isinstance(remote_enable, list) and len(remote_enable) > 2
+            else None
+        )
+        mobile_start_known_off = isinstance(remote2, int) and not remote2 & 1
+        minutes = parse_minutes_field(state.get("StartTime"))
+        start_time_known_positive = isinstance(minutes, int) and minutes > 0
+        if not mobile_start_known_off and not start_time_known_positive:
+            return None
+
+    return (
+        f"Start is not available right now (Status={status}, RemoteEnable={remote_enable!r}). "
+        "Start works when a programme is waiting to start (Status 4), or is programmed "
+        "(Status 3) with Mobile start on and no delayed start."
+    )
+
+
+def check_process_action_precondition(
+    state: dict[str, Any], action: int, device_type: MieleAppliance
+) -> str | None:
     """Whether a cached `/State` rules out a `ProcessAction` write before we send it.
 
     Pure and I/O-free so it can be tested without a device. Returns ``None``
@@ -121,28 +196,15 @@ def check_process_action_precondition(state: dict[str, Any], action: int) -> str
 
     Fields absent or not the expected type are treated as "unknown" and
     never block the write — we only refuse locally when we have positive
-    evidence it will fail.
+    evidence it will fail. The rule itself is per appliance family: laundry
+    and the dishwasher expose very different gating over `/State` (see
+    `_check_laundry_precondition` / `_check_dishwasher_precondition`), and
+    ovens get no `ProcessAction` buttons at all.
     """
-    remote_enable = state.get("RemoteEnable")
-    if (
-        isinstance(remote_enable, list)
-        and len(remote_enable) > REMOTE_ENABLE_FULL_CONTROL_INDEX
-        and isinstance(remote_enable[REMOTE_ENABLE_FULL_CONTROL_INDEX], int)
-        and remote_enable[REMOTE_ENABLE_FULL_CONTROL_INDEX] != REMOTE_ENABLE_FULL_CONTROL_VALUE
-    ):
-        return (
-            "Remote control is not enabled on this appliance "
-            f"(RemoteEnable={remote_enable!r}). Enable 'Remote control' / "
-            "'Mobile controllable' in the appliance's settings menu and try again."
-        )
-    if action == PROCESS_ACTION_START:
-        status = state.get("Status")
-        if isinstance(status, int) and status != STATUS_WAITING_TO_START:
-            return (
-                f"This appliance is not ready to start (Status={status}, "
-                f"expected {STATUS_WAITING_TO_START} = waiting to start). "
-                "Select and confirm a programme on the appliance first."
-            )
+    if device_type in DISHWASHER_FAMILY:
+        return _check_dishwasher_precondition(state, action)
+    if device_type in LAUNDRY_FAMILY:
+        return _check_laundry_precondition(state, action)
     return None
 
 
@@ -449,7 +511,11 @@ class MieleLanClient:
         return await self._put_state({"DeviceAction": DEVICE_ACTION_WAKE})
 
     async def send_process_action(
-        self, action: int, *, precondition_state: dict[str, Any] | None = None
+        self,
+        action: int,
+        *,
+        device_type: MieleAppliance | None = None,
+        precondition_state: dict[str, Any] | None = None,
     ) -> None:
         """PUT /State {"ProcessAction": action} — start/stop/pause/resume a programme.
 
@@ -467,14 +533,15 @@ class MieleLanClient:
         command the appliance actually rejected.
 
         `precondition_state` is the caller's last-known `/State` (no network
-        round trip) — when given, a write we already have positive evidence
-        will fail is rejected locally with the actual field values named,
-        instead of firing a request that's certain to be refused. See
+        round trip) and `device_type` selects which family's gate applies —
+        when both are given, a write we already have positive evidence will
+        fail is rejected locally with the actual field values named, instead
+        of firing a request that's certain to be refused. See
         `check_process_action_precondition` for what "positive evidence"
         means and why a clean result is not a success guarantee.
         """
-        if precondition_state is not None:
-            reason = check_process_action_precondition(precondition_state, action)
+        if precondition_state is not None and device_type is not None:
+            reason = check_process_action_precondition(precondition_state, action, device_type)
             if reason:
                 raise HomeAssistantError(reason)
         try:
@@ -489,22 +556,50 @@ class MieleLanClient:
                 f"The appliance refused this command (HTTP {exc.status_code})."
             ) from exc
 
-    async def start_process(self, precondition_state: dict[str, Any] | None = None) -> None:
-        await self.send_process_action(PROCESS_ACTION_START, precondition_state=precondition_state)
+    async def start_process(
+        self,
+        *,
+        device_type: MieleAppliance | None = None,
+        precondition_state: dict[str, Any] | None = None,
+    ) -> None:
+        await self.send_process_action(
+            PROCESS_ACTION_START, device_type=device_type, precondition_state=precondition_state
+        )
 
-    async def stop_process(self, precondition_state: dict[str, Any] | None = None) -> None:
-        await self.send_process_action(PROCESS_ACTION_STOP, precondition_state=precondition_state)
+    async def stop_process(
+        self,
+        *,
+        device_type: MieleAppliance | None = None,
+        precondition_state: dict[str, Any] | None = None,
+    ) -> None:
+        await self.send_process_action(
+            PROCESS_ACTION_STOP, device_type=device_type, precondition_state=precondition_state
+        )
 
-    async def pause_process(self, precondition_state: dict[str, Any] | None = None) -> None:
-        await self.send_process_action(PROCESS_ACTION_PAUSE, precondition_state=precondition_state)
+    async def pause_process(
+        self,
+        *,
+        device_type: MieleAppliance | None = None,
+        precondition_state: dict[str, Any] | None = None,
+    ) -> None:
+        await self.send_process_action(
+            PROCESS_ACTION_PAUSE, device_type=device_type, precondition_state=precondition_state
+        )
 
-    async def resume_process(self, precondition_state: dict[str, Any] | None = None) -> None:
+    async def resume_process(
+        self,
+        *,
+        device_type: MieleAppliance | None = None,
+        precondition_state: dict[str, Any] | None = None,
+    ) -> None:
         """Resume a paused programme.
 
         There is no Resume opcode — the app resumes by resending Start (1),
         and so do we.
         """
-        await self.send_process_action(PROCESS_ACTION_START, precondition_state=precondition_state)
+        await self.send_process_action(
+            PROCESS_ACTION_START, device_type=device_type, precondition_state=precondition_state
+        )
 
     async def write_user_request(self, opcode: int) -> None:
         """Send a GLOBAL_USER_REQ opcode via DOP2 leaf 2/1583.

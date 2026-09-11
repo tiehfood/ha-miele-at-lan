@@ -1,9 +1,9 @@
 """Tests for the start/stop/pause/resume button-to-appliance mapping.
 
-`STOP_PROCESS_FAMILY` (const.py) is pure and needs no Home Assistant.
-`button.BUTTONS` itself imports `homeassistant.components.button`, so it
-still runs without an `hass` instance — same reasoning as
-test_switch_power_gate.py, just one layer up.
+`START_STOP_PROCESS_FAMILY` / `DISHWASHER_FAMILY` (const.py) are pure and
+need no Home Assistant. `button.BUTTONS` itself imports
+`homeassistant.components.button`, so it still runs without an `hass`
+instance — same reasoning as test_switch_power_gate.py, just one layer up.
 """
 
 import sys
@@ -17,21 +17,21 @@ from custom_components.miele_lan.const import (  # noqa: E402
     DISHWASHER_FAMILY,
     LAUNDRY_FAMILY,
     OVEN_FAMILY,
-    STOP_PROCESS_FAMILY,
+    START_STOP_PROCESS_FAMILY,
     MieleAppliance,
 )
 
 
-def test_stop_process_family_excludes_every_oven() -> None:
-    assert set(STOP_PROCESS_FAMILY).isdisjoint(OVEN_FAMILY)
+def test_start_stop_process_family_excludes_every_oven() -> None:
+    assert set(START_STOP_PROCESS_FAMILY).isdisjoint(OVEN_FAMILY)
 
 
-def test_stop_process_family_is_laundry_plus_dishwasher() -> None:
-    assert set(STOP_PROCESS_FAMILY) == set(LAUNDRY_FAMILY) | set(DISHWASHER_FAMILY)
+def test_start_stop_process_family_is_laundry_plus_dishwasher() -> None:
+    assert set(START_STOP_PROCESS_FAMILY) == set(LAUNDRY_FAMILY) | set(DISHWASHER_FAMILY)
 
 
-def test_stop_process_family_is_a_subset_of_cycle_family() -> None:
-    assert set(STOP_PROCESS_FAMILY) <= set(CYCLE_FAMILY)
+def test_start_stop_process_family_is_a_subset_of_cycle_family() -> None:
+    assert set(START_STOP_PROCESS_FAMILY) <= set(CYCLE_FAMILY)
 
 
 def test_no_appliance_gets_two_stop_buttons() -> None:
@@ -54,8 +54,7 @@ def test_oven_keeps_dop2_stop_program_only() -> None:
     keys_for_oven = {
         d.description.key for d in button.BUTTONS if MieleAppliance.OVEN in d.types
     }
-    assert "stop_program" in keys_for_oven
-    assert "stop_process" not in keys_for_oven
+    assert keys_for_oven == {"wake", "stop_program"}
 
 
 def test_dishwasher_and_laundry_get_stop_process_not_stop_program() -> None:
@@ -67,9 +66,35 @@ def test_dishwasher_and_laundry_get_stop_process_not_stop_program() -> None:
         assert "stop_program" not in keys
 
 
-def test_start_pause_resume_stay_on_full_cycle_family() -> None:
+def test_start_stop_stay_on_start_stop_process_family() -> None:
     from custom_components.miele_lan import button
 
-    for key in ("start_process", "pause_process", "resume_process"):
+    for key in ("start_process", "stop_process"):
         (matching_def,) = [d for d in button.BUTTONS if d.description.key == key]
-        assert set(matching_def.types) == set(CYCLE_FAMILY)
+        assert set(matching_def.types) == set(START_STOP_PROCESS_FAMILY)
+
+
+def test_pause_and_resume_are_dishwasher_only() -> None:
+    from custom_components.miele_lan import button
+
+    for key in ("pause_process", "resume_process"):
+        (matching_def,) = [d for d in button.BUTTONS if d.description.key == key]
+        assert set(matching_def.types) == set(DISHWASHER_FAMILY)
+
+
+def test_laundry_gets_no_pause_or_resume() -> None:
+    from custom_components.miele_lan import button
+
+    for device_type in LAUNDRY_FAMILY:
+        keys = {d.description.key for d in button.BUTTONS if device_type in d.types}
+        assert "pause_process" not in keys
+        assert "resume_process" not in keys
+
+
+def test_ovens_get_no_process_action_buttons() -> None:
+    from custom_components.miele_lan import button
+
+    process_action_keys = {"start_process", "stop_process", "pause_process", "resume_process"}
+    for device_type in OVEN_FAMILY:
+        keys = {d.description.key for d in button.BUTTONS if device_type in d.types}
+        assert keys.isdisjoint(process_action_keys)

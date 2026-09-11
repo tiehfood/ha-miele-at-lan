@@ -33,10 +33,10 @@ Local Home Assistant integration for Miele@home appliances — ovens, hobs, dish
 
 | Family | Models | Sensors | Controls |
 |---|---|---|---|
-| **Oven** (incl. steam, combi, microwave) | H7560BP, H7164BP, DGC7860HCXL, DGM7440, … | status, program, phase, remaining/elapsed/start time, cavity & core temps, target & core-target, door, signals, light | start / stop / pause, wake, power, light, target temp* |
+| **Oven** (incl. steam, combi, microwave) | H7560BP, H7164BP, DGC7860HCXL, DGM7440, … | status, program, phase, remaining/elapsed/start time, cavity & core temps, target & core-target, door, signals, light | stop, wake, power, light, target temp* |
 | **Hob** | KM7576, KM7895 FL induction, induction + extractor | per-zone power (1..12 incl. ½ steps, boost/boost+, keep-warm), per-zone residual heat, per-zone timer, status | — |
-| **Dishwasher** | G7000-series + semi-pro/professional | status, program, phase, remaining/elapsed time, door, signals | start / stop / pause, wake, power |
-| **Washer / dryer / washer-dryer** | WWG/TWC/WWV/WTV series | status, program, phase, drying step, remaining/elapsed/start time, door, signals | start / stop / pause, wake |
+| **Dishwasher** | G7000-series + semi-pro/professional | status, program, phase, remaining/elapsed time, door, signals | start / stop / pause / resume, wake, power |
+| **Washer / dryer / washer-dryer** | WWG/TWC/WWV/WTV series | status, program, phase, drying step, remaining/elapsed/start time, door, signals | start / stop, wake |
 | **Fridge / freezer / fridge-freezer** | KF 7772 B, K 7000, KFN, KFNS, … | per-zone current + target temp, per-zone door, SuperCool, SuperFreeze, failure | — *(see Limitations)* |
 | **Wine cabinet** | KWT 6000, KWNS, KWTUS, wine + freezer | per-zone temp, per-zone door, light state | — *(see Limitations)* |
 | **Hood / range vent** | DA series, EK039W | fan step, light state, grease & charcoal filter saturation† | fan (off / 1-3 / boost)†, fan run-on time†, light |
