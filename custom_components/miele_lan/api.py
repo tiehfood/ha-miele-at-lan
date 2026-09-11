@@ -57,7 +57,14 @@ from .const import (
     OPCODE_LIGHT_ON,
     OPCODE_SWITCH_OFF,
     OPCODE_SWITCH_ON,
+    PROCESS_ACTION_PAUSE,
+    PROCESS_ACTION_RESUME,
+    PROCESS_ACTION_START,
+    PROCESS_ACTION_STOP,
+    REMOTE_ENABLE_FULL_CONTROL_INDEX,
+    REMOTE_ENABLE_FULL_CONTROL_VALUE,
     RUN_ON_TIME_MINUTES,
+    STATUS_WAITING_TO_START,
     USER_REQUEST_LEAF,
     USER_REQUEST_UNIT,
 )
@@ -100,6 +107,44 @@ def build_user_request_payload(opcode: int) -> bytes:
     if not 0 <= opcode <= 0xFF:
         raise ValueError(f"opcode out of range: {opcode}")
     return _OVEN_REQ_PREFIX + bytes([opcode]) + _OVEN_REQ_SUFFIX
+
+
+def check_process_action_precondition(state: dict[str, Any], action: int) -> str | None:
+    """Whether a cached `/State` rules out a `ProcessAction` write before we send it.
+
+    Pure and I/O-free so it can be tested without a device. Returns ``None``
+    when nothing known here rules the write out — that is *not* a guarantee
+    of success: upstream has reports of Start being refused by the
+    appliance's physical control panel with every `/State` field already
+    correct, so a clean result only means "we have no local reason to
+    expect a refusal". A non-``None`` result names the actual field value
+    so the resulting error is never a guessed cause.
+
+    Fields absent or not the expected type are treated as "unknown" and
+    never block the write — we only refuse locally when we have positive
+    evidence it will fail.
+    """
+    remote_enable = state.get("RemoteEnable")
+    if (
+        isinstance(remote_enable, list)
+        and len(remote_enable) > REMOTE_ENABLE_FULL_CONTROL_INDEX
+        and isinstance(remote_enable[REMOTE_ENABLE_FULL_CONTROL_INDEX], int)
+        and remote_enable[REMOTE_ENABLE_FULL_CONTROL_INDEX] != REMOTE_ENABLE_FULL_CONTROL_VALUE
+    ):
+        return (
+            "Remote control is not enabled on this appliance "
+            f"(RemoteEnable={remote_enable!r}). Enable 'Remote control' / "
+            "'Mobile controllable' in the appliance's settings menu and try again."
+        )
+    if action == PROCESS_ACTION_START:
+        status = state.get("Status")
+        if isinstance(status, int) and status != STATUS_WAITING_TO_START:
+            return (
+                f"This appliance is not ready to start (Status={status}, "
+                f"expected {STATUS_WAITING_TO_START} = waiting to start). "
+                "Select and confirm a programme on the appliance first."
+            )
+    return None
 
 
 # --- Dop1 request builders --------------------------------------------------
@@ -403,6 +448,59 @@ class MieleLanClient:
     async def wake(self) -> dict[str, Any]:
         """Wake the appliance from sleep. Returns the device's action ack."""
         return await self._put_state({"DeviceAction": DEVICE_ACTION_WAKE})
+
+    async def send_process_action(
+        self, action: int, *, precondition_state: dict[str, Any] | None = None
+    ) -> None:
+        """PUT /State {"ProcessAction": action} — start/stop/pause/resume a programme.
+
+        This is the only control surface some appliances expose at all: a
+        whole hardware/firmware family (EK057) answers HTTP 404 to every
+        DOP2 leaf, including GLOBAL_USER_REQ (`write_user_request`), so
+        `/State` is not a fallback here — it's the sole path for those
+        devices. Confirmed against the reference implementation
+        (MieleRESTServer), which performs remote start the same way.
+
+        Unlike `_put_state` (used by `wake`/`light_on`/`light_off`), a
+        refused process action is a real failure rather than a re-assertion
+        of an already-current value, so HTTP 400 is not treated as success
+        here — doing so previously produced a misleading "it worked" for a
+        command the appliance actually rejected.
+
+        `precondition_state` is the caller's last-known `/State` (no network
+        round trip) — when given, a write we already have positive evidence
+        will fail is rejected locally with the actual field values named,
+        instead of firing a request that's certain to be refused. See
+        `check_process_action_precondition` for what "positive evidence"
+        means and why a clean result is not a success guarantee.
+        """
+        if precondition_state is not None:
+            reason = check_process_action_precondition(precondition_state, action)
+            if reason:
+                raise HomeAssistantError(reason)
+        try:
+            await self._client._request_bytes(
+                "PUT",
+                f"/Devices/{self._route}/State",
+                body={"ProcessAction": action},
+                allowed_status=(200, 204),
+            )
+        except ResponseError as exc:
+            raise HomeAssistantError(
+                f"The appliance refused this command (HTTP {exc.status_code})."
+            ) from exc
+
+    async def start_process(self, precondition_state: dict[str, Any] | None = None) -> None:
+        await self.send_process_action(PROCESS_ACTION_START, precondition_state=precondition_state)
+
+    async def stop_process(self, precondition_state: dict[str, Any] | None = None) -> None:
+        await self.send_process_action(PROCESS_ACTION_STOP, precondition_state=precondition_state)
+
+    async def pause_process(self, precondition_state: dict[str, Any] | None = None) -> None:
+        await self.send_process_action(PROCESS_ACTION_PAUSE, precondition_state=precondition_state)
+
+    async def resume_process(self, precondition_state: dict[str, Any] | None = None) -> None:
+        await self.send_process_action(PROCESS_ACTION_RESUME, precondition_state=precondition_state)
 
     async def write_user_request(self, opcode: int) -> None:
         """Send a GLOBAL_USER_REQ opcode via DOP2 leaf 2/1583.

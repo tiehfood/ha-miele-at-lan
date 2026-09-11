@@ -52,6 +52,16 @@ DEVICE_ACTION_WAKE = 2
 PROCESS_ACTION_START = 1
 PROCESS_ACTION_STOP = 2
 PROCESS_ACTION_PAUSE = 3
+PROCESS_ACTION_RESUME = 6
+
+# Preconditions for a `ProcessAction` write (see MieleLanClient.send_process_action).
+# Sourced from the reference implementation's readiness gate (MieleRESTServer:
+# DeviceReadyToStart = Status==0x04, DeviceRemoteStartCapable = 15 in
+# RemoteEnable) and cross-checked against our own StateStatus[4] ==
+# "waiting_to_start" (enums.py) and REMOTE_LABELS[15] == "full" (sensor.py).
+STATUS_WAITING_TO_START = 4
+REMOTE_ENABLE_FULL_CONTROL_INDEX = 0
+REMOTE_ENABLE_FULL_CONTROL_VALUE = 15
 
 # DOP2 GLOBAL_USER_REQ leaf — universal across oven, laundry, dishwasher.
 USER_REQUEST_UNIT = 2
@@ -217,6 +227,18 @@ DISHWASHER_FAMILY: tuple[MieleAppliance, ...] = (
 # Cycle devices = devices that run a "program" with phases, remaining time, etc.
 CYCLE_FAMILY: tuple[MieleAppliance, ...] = (
     *OVEN_FAMILY, *LAUNDRY_FAMILY, *DISHWASHER_FAMILY,
+)
+
+# Devices that get the /State ProcessAction "stop" button (button.py:
+# stop_process). Deliberately excludes ovens: they already have a working
+# stop via the DOP2 GLOBAL_USER_REQ button (stop_program), and we have no
+# evidence the two mechanisms behave identically, so shipping both would
+# just leave an oven owner guessing which one to press. Laundry and
+# dishwasher are exactly the families this PUT /State path exists for —
+# appliances that have no DOP2 stop at all on firmware that blocks DOP2
+# writes outright.
+STOP_PROCESS_FAMILY: tuple[MieleAppliance, ...] = (
+    *LAUNDRY_FAMILY, *DISHWASHER_FAMILY,
 )
 
 HOB_FAMILY: tuple[MieleAppliance, ...] = (

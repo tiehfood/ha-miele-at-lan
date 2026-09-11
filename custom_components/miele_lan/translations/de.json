@@ -2186,6 +2186,18 @@
       },
       "stop_program": {
         "name": "Programm stoppen"
+      },
+      "start_process": {
+        "name": "Start"
+      },
+      "stop_process": {
+        "name": "Stopp (Fernsteuerung)"
+      },
+      "pause_process": {
+        "name": "Pause"
+      },
+      "resume_process": {
+        "name": "Fortsetzen"
       }
     },
     "fan": {
