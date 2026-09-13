@@ -1062,6 +1062,9 @@
           "smoothing": "Glättung"
         }
       },
+      "spin_speed": {
+        "name": "Schleuderdrehzahl"
+      },
       "plate_1_step": {
         "name": "Kochzone 1 Leistung",
         "state": {

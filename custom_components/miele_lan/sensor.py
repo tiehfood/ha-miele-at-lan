@@ -19,7 +19,12 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
+from homeassistant.const import (
+    REVOLUTIONS_PER_MINUTE,
+    EntityCategory,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -366,8 +371,12 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             value_fn=lambda s: _temp_or_none(s.get("Temperature"), 1),
         ),
     ),
+    # TargetTemperature[0] is also the wash-cycle target on laundry appliances
+    # (e.g. a 40C wash); reuse the oven sensor rather than duplicating it.
+    # _temp_or_none already maps the -32768 sentinel to None, so a dryer or
+    # any program with no target temperature shows nothing.
     MieleLanSensorDef(
-        types=OVEN_FAMILY,
+        types=(*OVEN_FAMILY, *LAUNDRY_FAMILY),
         description=MieleLanSensorDescription(
             key="target_temperature",
             translation_key="target_temperature",
@@ -489,6 +498,28 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             translation_key="drying_step",
             required_state_key="DryingStep",
             value_fn=_gated_enum("DryingStep", enums.StateDryingStep),
+        ),
+    ),
+    # Spin speed — only appliances with a physical spin cycle. A pure tumble
+    # dryer never spins, so it's excluded from `types` rather than relying on
+    # `required_state_key` alone: that check only looks at key presence, and
+    # would leave a permanent 0 rpm entity behind if a dryer's firmware ever
+    # serializes the field. required_state_key still guards washing machines
+    # whose firmware omits SpinningSpeed entirely. Gated like the cycle-family
+    # time sensors — firmware keeps the last cycle's speed cached once idle.
+    MieleLanSensorDef(
+        types=(
+            MieleAppliance.WASHING_MACHINE,
+            MieleAppliance.WASHING_MACHINE_SEMI_PROFESSIONAL,
+            MieleAppliance.WASHING_MACHINE_PROFESSIONAL,
+            MieleAppliance.WASHER_DRYER,
+        ),
+        description=MieleLanSensorDescription(
+            key="spin_speed",
+            translation_key="spin_speed",
+            native_unit_of_measurement=REVOLUTIONS_PER_MINUTE,
+            required_state_key="SpinningSpeed",
+            value_fn=_gated(lambda s: s.get("SpinningSpeed")),
         ),
     ),
     # --- Raw (diagnostic) siblings of gated cycle-family sensors -------------

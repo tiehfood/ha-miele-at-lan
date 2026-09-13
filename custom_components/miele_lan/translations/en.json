@@ -1061,6 +1061,9 @@
           "smoothing": "Smoothing"
         }
       },
+      "spin_speed": {
+        "name": "Spin speed"
+      },
       "plate_1_step": {
         "name": "Cooking zone 1 power",
         "state": {
