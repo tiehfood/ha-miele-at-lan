@@ -346,6 +346,9 @@ async def enroll_all(
     for d in devices:
         fab = d.get("fabNr") or d.get("fab")
         if not fab:
+            _LOGGER.warning(
+                "enrollment worklist entry has no fab number, skipping: %s", d
+            )
             continue
         host_ip = await resolver.resolve(fab)
         if not host_ip:

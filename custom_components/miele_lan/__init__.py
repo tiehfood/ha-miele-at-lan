@@ -87,6 +87,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return await _setup_cloud(hass, entry)
 
 
+def _merge_mdns_adoptions(
+    devices: list[dict[str, Any]], mdns_results: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Union mDNS-confirmed fabs into the cloud worklist.
+
+    A fab already present under either the `fabNr` or `fab` key (the two
+    shapes `enroll_all` accepts) is not duplicated. Returns the merged
+    worklist and the subset that was newly appended, in the same dict shape
+    the enrollment worklist already uses.
+    """
+    known = {d.get("fabNr") or d.get("fab") for d in devices}
+    known.discard(None)
+    adopted = [
+        {"fabNr": r["fabNr"], "deviceType": r.get("deviceType", 0), "deviceName": ""}
+        for r in mdns_results
+        if r.get("fabNr") and r["fabNr"] not in known
+    ]
+    return devices + adopted, adopted
+
+
 async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Cloud-pair path: household key already extracted, enrol every device,
     start the push listener, spawn one coordinator per device."""
@@ -141,19 +161,18 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.info("mDNS resolved %d fab→IP mapping(s): %s",
                      len(mdns_static), mdns_static)
     merged_static_ips = {**static_ips, **mdns_static}
-    if not devices and mdns_results:
-        # The cloud can return a household with an empty device list — observed
-        # on an `au` account whose appliances the Miele app shows fine. mDNS is
-        # authoritative for what is actually on the LAN, so adopt what it found.
+    devices, adopted = _merge_mdns_adoptions(devices, mdns_results)
+    if adopted:
+        # The cloud device list is frozen at config-entry creation (issue #37)
+        # and can be missing an appliance the cloud never returned — an empty
+        # list on an `au` account whose appliances the Miele app shows fine,
+        # or a partial list missing one of several appliances. mDNS is
+        # authoritative for what is actually on the LAN, so union it in.
         _LOGGER.info(
-            "cloud listed no devices; adopting the %d appliance(s) mDNS found",
-            len(mdns_results),
+            "mDNS confirmed %d appliance(s) not in the entry's device list "
+            "(%s) — adopting for this setup run",
+            len(adopted), ", ".join(d["fabNr"] for d in adopted),
         )
-        devices = [
-            {"fabNr": r["fabNr"], "deviceType": r.get("deviceType", 0),
-             "deviceName": ""}
-            for r in mdns_results
-        ]
 
     if not devices:
         # Only now is this fatal: neither source knows of an appliance. Bailing
