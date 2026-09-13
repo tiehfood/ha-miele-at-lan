@@ -35,9 +35,14 @@ from .cloud import (
     parse_redirect_url,
 )
 from .enrollment import mdns_discover_household, mdns_household_ids
-from .options_validation import merge_known_device_fields, parse_static_ip_lines
+from .options_validation import (
+    merge_known_device_fields,
+    parse_static_ip_lines,
+    validate_advertise_address,
+)
 from .push_listener import detect_lan_ip
 from .const import (
+    CONF_ADVERTISE_ADDRESS,
     CONF_COUNTRY,
     CONF_DEVICES,
     CONF_GROUP_ID,
@@ -443,6 +448,9 @@ class MieleLanOptionsFlow(config_entries.OptionsFlow):
             **(self.config_entry.options.get(CONF_STATIC_IPS) or {}),
         }
 
+    def _current_advertise_address(self) -> str:
+        return self.config_entry.options.get(CONF_ADVERTISE_ADDRESS) or ""
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -456,11 +464,13 @@ class MieleLanOptionsFlow(config_entries.OptionsFlow):
     async def async_step_known_devices(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """One optional field per known appliance, keyed by its fab number."""
+        """One optional field per known appliance, keyed by its fab number,
+        plus the mDNS advertise-address override."""
         devices: list[dict[str, Any]] = list(
             self.config_entry.data.get(CONF_DEVICES) or []
         )
         current = self._current_static_ips()
+        current_addr = self._current_advertise_address()
         names = {
             d["fabNr"]: d.get("deviceName") or ""
             for d in devices
@@ -469,22 +479,33 @@ class MieleLanOptionsFlow(config_entries.OptionsFlow):
         fabs = sorted(names)
         errors: dict[str, str] = {}
         if user_input is not None:
+            raw_addr = user_input.pop(CONF_ADVERTISE_ADDRESS, "")
+            addr, addr_valid = validate_advertise_address(raw_addr)
             submitted = {fab: user_input.get(fab, "") for fab in fabs}
             new_static, invalid = merge_known_device_fields(current, submitted)
             if invalid:
                 errors["base"] = "invalid_static_ip"
+            elif not addr_valid:
+                errors["base"] = "invalid_advertise_address"
             else:
-                return self.async_create_entry(
-                    title="", data={CONF_STATIC_IPS: new_static}
-                )
+                data: dict[str, Any] = {CONF_STATIC_IPS: new_static}
+                if addr:
+                    data[CONF_ADVERTISE_ADDRESS] = addr
+                return self.async_create_entry(title="", data=data)
         return self.async_show_form(
             step_id="known_devices",
             data_schema=vol.Schema(
                 {
                     vol.Optional(
-                        fab, description={"suggested_value": current.get(fab, "")}
-                    ): str
-                    for fab in fabs
+                        CONF_ADVERTISE_ADDRESS,
+                        description={"suggested_value": current_addr},
+                    ): str,
+                    **{
+                        vol.Optional(
+                            fab, description={"suggested_value": current.get(fab, "")}
+                        ): str
+                        for fab in fabs
+                    },
                 }
             ),
             errors=errors,
@@ -500,19 +521,27 @@ class MieleLanOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """No known devices yet — the household's cloud/mDNS discovery never
-        ran. Accept `fabNr=IP` pairs, one per line, instead."""
+        ran. Accept `fabNr=IP` pairs, one per line, plus the mDNS
+        advertise-address override."""
         current = self._current_static_ips()
+        current_addr = self._current_advertise_address()
         errors: dict[str, str] = {}
         if user_input is not None:
+            addr, addr_valid = validate_advertise_address(
+                user_input.get(CONF_ADVERTISE_ADDRESS, "")
+            )
             mapping, bad_lines = parse_static_ip_lines(
                 user_input.get(STATIC_IPS_TEXT_FIELD, "")
             )
             if bad_lines:
                 errors["base"] = "invalid_static_ip"
+            elif not addr_valid:
+                errors["base"] = "invalid_advertise_address"
             else:
-                return self.async_create_entry(
-                    title="", data={CONF_STATIC_IPS: mapping}
-                )
+                data: dict[str, Any] = {CONF_STATIC_IPS: mapping}
+                if addr:
+                    data[CONF_ADVERTISE_ADDRESS] = addr
+                return self.async_create_entry(title="", data=data)
         default_text = "\n".join(f"{fab}={ip}" for fab, ip in sorted(current.items()))
         return self.async_show_form(
             step_id="freeform",
@@ -521,7 +550,11 @@ class MieleLanOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(
                         STATIC_IPS_TEXT_FIELD,
                         description={"suggested_value": default_text},
-                    ): str
+                    ): str,
+                    vol.Optional(
+                        CONF_ADVERTISE_ADDRESS,
+                        description={"suggested_value": current_addr},
+                    ): str,
                 }
             ),
             errors=errors,

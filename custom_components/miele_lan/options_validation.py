@@ -48,6 +48,20 @@ def merge_known_device_fields(
     return result, invalid
 
 
+def validate_advertise_address(value: str) -> tuple[str, bool]:
+    """Validate the options-flow "advertise address" field.
+
+    An empty/whitespace-only value means "unset" and clears any previously
+    configured override, falling back to auto-detection. Returns
+    `(normalised_value, valid)` — `valid=False` means the caller should show
+    a form error and leave the stored option untouched.
+    """
+    value = (value or "").strip()
+    if not value:
+        return "", True
+    return value, is_valid_ipv4(value)
+
+
 def parse_static_ip_lines(text: str) -> tuple[dict[str, str], list[str]]:
     """Parse free-form `fabNr=IP` pairs, one per line.
 

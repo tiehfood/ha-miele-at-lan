@@ -85,6 +85,22 @@ def detect_lan_ip(target_ip: str) -> str:
         s.close()
 
 
+def resolve_advertise_ip(*, configured: str | None, detected: str) -> tuple[str, bool]:
+    """Pick the IP our SuperVision mDNS advertisement carries.
+
+    An explicit `advertise_address` option wins over the auto-detected LAN
+    IP — needed when HA sits behind a reverse proxy or an mDNS repeater
+    bridges an isolated network and the detected IP is unreachable from the
+    appliance's side (issue #45). Returns `(ip, is_configured)` so the caller
+    can log which source is in play; this same value also has to be excluded
+    from mDNS discovery browses, since it is what our own advertisement (or a
+    repeater's copy of it) will show up as.
+    """
+    if configured:
+        return configured, True
+    return detected, False
+
+
 def _miele_pad(body: bytes) -> bytes:
     if not body:
         return body
@@ -556,4 +572,5 @@ __all__ = [
     "PushCallback",
     "synthetic_mac_hostname",
     "detect_lan_ip",
+    "resolve_advertise_ip",
 ]

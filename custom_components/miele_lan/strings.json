@@ -69,21 +69,30 @@
     "step": {
       "known_devices": {
         "title": "Miele@LAN — static IPs",
-        "description": "Only needed if your network blocks mDNS/multicast between Home Assistant and the appliances (VLANs, IGMP snooping, an access point that filters mDNS). Enter an IPv4 address for an appliance to pin it, or leave a field blank to fall back to automatic discovery. Known appliances in this household: {devices}"
+        "description": "Only needed if your network blocks mDNS/multicast between Home Assistant and the appliances (VLANs, IGMP snooping, an access point that filters mDNS). Enter an IPv4 address for an appliance to pin it, or leave a field blank to fall back to automatic discovery. Known appliances in this household: {devices}",
+        "data": {
+          "advertise_address": "Advertise address (leave empty to auto-detect)"
+        },
+        "data_description": {
+          "advertise_address": "IPv4 address appliances should use to reach Home Assistant's push listener, if different from the automatically detected LAN address — for example when Home Assistant runs behind a reverse proxy or an mDNS repeater bridges an isolated network. Leave empty to auto-detect."
+        }
       },
       "freeform": {
         "title": "Miele@LAN — static IPs",
         "description": "Only needed if your network blocks mDNS/multicast between Home Assistant and the appliances (VLANs, IGMP snooping, an access point that filters mDNS). This household has no known appliances yet, so list them manually below.",
         "data": {
-          "static_ips_text": "Static IP addresses"
+          "static_ips_text": "Static IP addresses",
+          "advertise_address": "Advertise address (leave empty to auto-detect)"
         },
         "data_description": {
-          "static_ips_text": "One `fabNr=IP` pair per line, e.g. `000000000000=192.0.2.1`. Leave a line out to fall back to automatic discovery for that appliance."
+          "static_ips_text": "One `fabNr=IP` pair per line, e.g. `000000000000=192.0.2.1`. Leave a line out to fall back to automatic discovery for that appliance.",
+          "advertise_address": "IPv4 address appliances should use to reach Home Assistant's push listener, if different from the automatically detected LAN address — for example when Home Assistant runs behind a reverse proxy or an mDNS repeater bridges an isolated network. Leave empty to auto-detect."
         }
       }
     },
     "error": {
-      "invalid_static_ip": "One or more entries are invalid — the fab number must be 12 digits and the address a valid IPv4 address."
+      "invalid_static_ip": "One or more entries are invalid — the fab number must be 12 digits and the address a valid IPv4 address.",
+      "invalid_advertise_address": "The advertise address must be a valid IPv4 address, or left empty to auto-detect."
     }
   },
   "entity": {

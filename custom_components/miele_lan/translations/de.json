@@ -70,21 +70,30 @@
     "step": {
       "known_devices": {
         "title": "Miele@LAN — Statische IPs",
-        "description": "Nur nötig, wenn dein Netzwerk mDNS/Multicast zwischen Home Assistant und den Geräten blockiert (VLANs, IGMP-Snooping, ein Access Point, der mDNS filtert). Für ein Gerät eine IPv4-Adresse eintragen, um sie festzulegen, oder ein Feld leer lassen, um zur automatischen Erkennung zurückzukehren. Bekannte Geräte in diesem Haushalt: {devices}"
+        "description": "Nur nötig, wenn dein Netzwerk mDNS/Multicast zwischen Home Assistant und den Geräten blockiert (VLANs, IGMP-Snooping, ein Access Point, der mDNS filtert). Für ein Gerät eine IPv4-Adresse eintragen, um sie festzulegen, oder ein Feld leer lassen, um zur automatischen Erkennung zurückzukehren. Bekannte Geräte in diesem Haushalt: {devices}",
+        "data": {
+          "advertise_address": "Advertise-Adresse (leer lassen für automatische Erkennung)"
+        },
+        "data_description": {
+          "advertise_address": "IPv4-Adresse, unter der Geräte den Push-Listener von Home Assistant erreichen sollen, falls abweichend von der automatisch erkannten LAN-Adresse — z. B. wenn Home Assistant hinter einem Reverse Proxy läuft oder ein mDNS-Repeater ein isoliertes Netzwerk überbrückt. Leer lassen für automatische Erkennung."
+        }
       },
       "freeform": {
         "title": "Miele@LAN — Statische IPs",
         "description": "Nur nötig, wenn dein Netzwerk mDNS/Multicast zwischen Home Assistant und den Geräten blockiert (VLANs, IGMP-Snooping, ein Access Point, der mDNS filtert). Für diesen Haushalt sind noch keine Geräte bekannt — bitte unten manuell eintragen.",
         "data": {
-          "static_ips_text": "Statische IP-Adressen"
+          "static_ips_text": "Statische IP-Adressen",
+          "advertise_address": "Advertise-Adresse (leer lassen für automatische Erkennung)"
         },
         "data_description": {
-          "static_ips_text": "Ein `fabNr=IP`-Paar pro Zeile, z. B. `000000000000=192.0.2.1`. Eine Zeile weglassen, um für dieses Gerät zur automatischen Erkennung zurückzukehren."
+          "static_ips_text": "Ein `fabNr=IP`-Paar pro Zeile, z. B. `000000000000=192.0.2.1`. Eine Zeile weglassen, um für dieses Gerät zur automatischen Erkennung zurückzukehren.",
+          "advertise_address": "IPv4-Adresse, unter der Geräte den Push-Listener von Home Assistant erreichen sollen, falls abweichend von der automatisch erkannten LAN-Adresse — z. B. wenn Home Assistant hinter einem Reverse Proxy läuft oder ein mDNS-Repeater ein isoliertes Netzwerk überbrückt. Leer lassen für automatische Erkennung."
         }
       }
     },
     "error": {
-      "invalid_static_ip": "Ein oder mehrere Einträge sind ungültig — die Fabriknummer muss 12-stellig sein und die Adresse eine gültige IPv4-Adresse."
+      "invalid_static_ip": "Ein oder mehrere Einträge sind ungültig — die Fabriknummer muss 12-stellig sein und die Adresse eine gültige IPv4-Adresse.",
+      "invalid_advertise_address": "Die Advertise-Adresse muss eine gültige IPv4-Adresse sein oder leer bleiben für automatische Erkennung."
     }
   },
   "entity": {

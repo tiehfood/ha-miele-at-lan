@@ -148,3 +148,38 @@ def test_parse_empty_text_clears_everything() -> None:
     mapping, bad = ov.parse_static_ip_lines("")
     assert mapping == {}
     assert bad == []
+
+
+# ------------------------------------------------------ validate_advertise_address
+def test_advertise_address_accepts_valid_ipv4() -> None:
+    value, valid = ov.validate_advertise_address(IP)
+    assert value == IP
+    assert valid is True
+
+
+def test_advertise_address_strips_whitespace() -> None:
+    value, valid = ov.validate_advertise_address(f"  {IP}  ")
+    assert value == IP
+    assert valid is True
+
+
+def test_advertise_address_empty_clears_and_is_valid() -> None:
+    value, valid = ov.validate_advertise_address("")
+    assert value == ""
+    assert valid is True
+
+
+def test_advertise_address_whitespace_only_clears_and_is_valid() -> None:
+    value, valid = ov.validate_advertise_address("   ")
+    assert value == ""
+    assert valid is True
+
+
+def test_advertise_address_rejects_garbage() -> None:
+    value, valid = ov.validate_advertise_address("not-an-ip")
+    assert valid is False
+
+
+def test_advertise_address_rejects_ipv6() -> None:
+    value, valid = ov.validate_advertise_address("::1")
+    assert valid is False

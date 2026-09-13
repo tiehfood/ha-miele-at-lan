@@ -27,6 +27,7 @@ from homeassistant.helpers import issue_registry as ir
 from .api import MieleLanClient
 from .cloud import refresh_access_token
 from .const import (
+    CONF_ADVERTISE_ADDRESS,
     CONF_COUNTRY,
     CONF_DEVICES,
     CONF_GROUP_ID,
@@ -52,6 +53,7 @@ from .push_listener import (
     MielePushListener,
     PushEvent,
     detect_lan_ip,
+    resolve_advertise_ip,
     synthetic_mac_hostname,
 )
 from .services import async_remove_services, async_setup_services
@@ -129,8 +131,16 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # If we know any appliance IP, route toward it (multi-homed boxes pick the
     # right interface). Otherwise just toward a public IP.
     route_target = next(iter(static_ips.values()), None) or "1.1.1.1"
-    ha_lan_ip = detect_lan_ip(route_target)
-    _LOGGER.info("HA LAN IP for mDNS / push listener: %s", ha_lan_ip)
+    detected_ip = detect_lan_ip(route_target)
+    ha_lan_ip, advertise_is_configured = resolve_advertise_ip(
+        configured=entry.options.get(CONF_ADVERTISE_ADDRESS), detected=detected_ip,
+    )
+    _LOGGER.info(
+        "push listener will advertise %s (%s) — this is also the address "
+        "excluded from mDNS discovery to avoid self-adoption",
+        ha_lan_ip,
+        "configured via advertise address option" if advertise_is_configured else "auto-detected",
+    )
 
     bundle: dict[str, Any] = {
         "kind": "cloud",
