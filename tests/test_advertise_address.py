@@ -116,8 +116,10 @@ def _run_setup_cloud(monkeypatch, entry: _FakeEntry) -> dict:
     captured_mdns_kwargs: dict = {}
 
     async def _fake_mdns_discover_household(*, group_id_hex, group_key_hex, timeout,
-                                              zeroconf, exclude_ha_fab, exclude_ip):
+                                              zeroconf, exclude_ha_fab, exclude_ip,
+                                              exclude_ip_is_configured=False):
         captured_mdns_kwargs["exclude_ip"] = exclude_ip
+        captured_mdns_kwargs["exclude_ip_is_configured"] = exclude_ip_is_configured
         return []
 
     monkeypatch.setattr(miele_lan, "mdns_discover_household", _fake_mdns_discover_household)
@@ -135,6 +137,7 @@ def _run_setup_cloud(monkeypatch, entry: _FakeEntry) -> dict:
     return {
         "listener_host_ip": _FakeListener.instances[0].kwargs["host_ip"],
         "mdns_exclude_ip": captured_mdns_kwargs["exclude_ip"],
+        "mdns_exclude_ip_is_configured": captured_mdns_kwargs["exclude_ip_is_configured"],
     }
 
 
@@ -142,6 +145,7 @@ def test_unset_option_advertises_detected_ip(monkeypatch) -> None:
     result = _run_setup_cloud(monkeypatch, _entry(advertise_address=None))
     assert result["listener_host_ip"] == DETECTED_IP
     assert result["mdns_exclude_ip"] == DETECTED_IP
+    assert result["mdns_exclude_ip_is_configured"] is False
 
 
 def test_configured_option_advertises_that_address(monkeypatch) -> None:
@@ -157,3 +161,4 @@ def test_configured_option_is_also_excluded_from_mdns_discovery(monkeypatch) -> 
     result = _run_setup_cloud(monkeypatch, _entry(advertise_address=CONFIGURED_IP))
     assert result["mdns_exclude_ip"] == CONFIGURED_IP
     assert result["mdns_exclude_ip"] != DETECTED_IP
+    assert result["mdns_exclude_ip_is_configured"] is True

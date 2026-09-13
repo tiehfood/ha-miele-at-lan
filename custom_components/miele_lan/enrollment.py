@@ -623,6 +623,7 @@ async def mdns_discover_household(
     zeroconf: Any | None = None,
     exclude_ha_fab: str | None = None,
     exclude_ip: str | None = None,
+    exclude_ip_is_configured: bool = False,
 ) -> list[dict[str, Any]]:
     """Browse the LAN for `_mieleathome._tcp.local.` services whose `group=`
     TXT matches `group_id_hex`, then signed-GET `/Devices` on each to learn
@@ -634,6 +635,11 @@ async def mdns_discover_household(
     Real Miele appliances advertise as `Miele <model>._mieleathome._tcp.local.`
     (no fab in the service name), so we cannot extract fab from mDNS alone.
     The signed GET /Devices is the canonical source.
+
+    `exclude_ip_is_configured` tells the `exclude_ip` hit-skip whether that
+    address came from the user-set advertise-address option rather than
+    auto-detection, so a typo'd appliance IP surfaces at WARNING instead of
+    vanishing behind a DEBUG line that claims it was "our own IP".
     """
     try:
         from zeroconf import IPVersion, ServiceStateChange
@@ -668,7 +674,14 @@ async def mdns_discover_household(
         if not ip:
             return
         if exclude_ip and ip == exclude_ip:
-            _LOGGER.debug("ignoring self-advertised mDNS hit at our own IP %s", ip)
+            if exclude_ip_is_configured:
+                _LOGGER.warning(
+                    "ignoring mDNS hit at %s — it matches the configured "
+                    "advertise_address option; if this is an appliance rather "
+                    "than Home Assistant, that option is wrong", ip,
+                )
+            else:
+                _LOGGER.debug("ignoring self-advertised mDNS hit at our own IP %s", ip)
             return
         # Skip our own listener: instance name contains "HomeAssistant <ha_fab>"
         # or the synthetic fab.

@@ -226,6 +226,54 @@ def test_ignores_hit_from_our_own_lan_ip(monkeypatch) -> None:
     assert probed == []
 
 
+def test_excluded_ip_hit_logs_debug_when_auto_detected(monkeypatch, caplog) -> None:
+    our_ip = "203.0.113.17"
+    name = "Miele Oven._mieleathome._tcp.local."
+    infos = {
+        name: _FakeServiceInfo(
+            group=GROUP, ip=our_ip, devicetype=0, server="Miele-oven.local.",
+        ),
+    }
+
+    with caplog.at_level(logging.DEBUG):
+        _discover(monkeypatch, infos, {}, exclude_ip=our_ip)
+
+    assert not any(
+        record.levelno == logging.WARNING and our_ip in record.getMessage()
+        for record in caplog.records
+    )
+    assert any(
+        record.levelno == logging.DEBUG and our_ip in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_excluded_ip_hit_logs_warning_when_configured(monkeypatch, caplog) -> None:
+    """A typo'd appliance IP in the advertise_address option must not vanish
+    behind a DEBUG line that claims it was "our own IP" (issue behind
+    dd19438) — it needs a WARNING naming the option so the user can fix it."""
+    configured_ip = "203.0.113.18"
+    name = "Miele Oven._mieleathome._tcp.local."
+    infos = {
+        name: _FakeServiceInfo(
+            group=GROUP, ip=configured_ip, devicetype=0, server="Miele-oven.local.",
+        ),
+    }
+
+    with caplog.at_level(logging.DEBUG):
+        _discover(
+            monkeypatch, infos, {},
+            exclude_ip=configured_ip, exclude_ip_is_configured=True,
+        )
+
+    warnings = [
+        r for r in caplog.records
+        if r.levelno == logging.WARNING and configured_ip in r.getMessage()
+    ]
+    assert len(warnings) == 1
+    assert "advertise_address" in warnings[0].getMessage()
+
+
 def test_normal_appliance_hit_still_returned_with_all_exclusions_active(
     monkeypatch,
 ) -> None:
