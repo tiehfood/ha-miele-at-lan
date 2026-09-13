@@ -642,6 +642,8 @@ async def mdns_discover_household(
         _LOGGER.warning("zeroconf not installed — cannot discover Miele appliances")
         return []
 
+    from .push_listener import DEFAULT_DEVICE_TYPE
+
     want_group = group_id_hex.upper()
     hits: dict[str, dict[str, Any]] = {}  # key = ip; value = mDNS hit
     owns_zc = zeroconf is None
@@ -673,14 +675,22 @@ async def mdns_discover_household(
         if exclude_ha_fab and exclude_ha_fab in name:
             _LOGGER.debug("ignoring self-advertised mDNS hit (ha_fab=%s)", exclude_ha_fab)
             return
+        devicetype = (
+            int(props["devicetype"]) if (props.get("devicetype") or "").isdigit() else 0
+        )
+        if devicetype == DEFAULT_DEVICE_TYPE:
+            _LOGGER.debug(
+                "ignoring mDNS hit at %s advertising DEFAULT_DEVICE_TYPE — a Home "
+                "Assistant push listener, not an appliance", ip,
+            )
+            return
         async with seen_lock:
             if ip in hits:
                 return
             hits[ip] = {
                 "ip": ip,
                 "hostname": (info.server or "").rstrip("."),
-                "devicetype": int(props.get("devicetype", "0"))
-                if (props.get("devicetype") or "").isdigit() else 0,
+                "devicetype": devicetype,
             }
 
     def _on_state(zeroconf, service_type, name, state_change):  # type: ignore[no-untyped-def]

@@ -36,6 +36,7 @@ from .cloud import (
 )
 from .enrollment import mdns_discover_household, mdns_household_ids
 from .options_validation import merge_known_device_fields, parse_static_ip_lines
+from .push_listener import detect_lan_ip
 from .const import (
     CONF_COUNTRY,
     CONF_DEVICES,
@@ -278,8 +279,10 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 try:
                     from homeassistant.components import zeroconf as ha_zc
                     shared_zc = await ha_zc.async_get_async_instance(self.hass)
+                    ha_lan_ip = detect_lan_ip("1.1.1.1")
                     devices = await mdns_discover_household(
                         g_id, g_key, timeout=4.0, zeroconf=shared_zc,
+                        exclude_ip=ha_lan_ip,
                     )
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.warning("mDNS discovery raised: %s", err)

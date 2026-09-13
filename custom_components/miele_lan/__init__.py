@@ -155,6 +155,8 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         group_key_hex=group_key,
         timeout=4.0,
         zeroconf=shared_zc,
+        exclude_ha_fab=ha_fab,
+        exclude_ip=ha_lan_ip,
     )
     mdns_static = {r["fabNr"]: r["host"] for r in mdns_results if r.get("fabNr")}
     if mdns_static:
