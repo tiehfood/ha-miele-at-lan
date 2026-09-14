@@ -588,6 +588,12 @@ class MieleLanClient:
             raise HomeAssistantError(
                 f"The appliance refused this command (HTTP {exc.status_code})."
             ) from exc
+        except NetworkTimeoutError as exc:
+            raise HomeAssistantError(
+                "The appliance did not respond to the command (timeout)."
+            ) from exc
+        except NetworkConnectionError as exc:
+            raise HomeAssistantError("Could not connect to the appliance.") from exc
 
     async def start_process(
         self,

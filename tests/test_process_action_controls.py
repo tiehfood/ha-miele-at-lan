@@ -15,7 +15,11 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from asyncmiele.exceptions.network import ResponseError  # noqa: E402
+from asyncmiele.exceptions.network import (  # noqa: E402
+    NetworkConnectionError,
+    NetworkTimeoutError,
+    ResponseError,
+)
 from homeassistant.exceptions import HomeAssistantError  # noqa: E402
 
 from custom_components.miele_lan.api import (  # noqa: E402
@@ -106,6 +110,30 @@ def test_500_does_not_assert_a_specific_cause() -> None:
     assert "500" in message
     assert "Remote control" not in message
     assert "panel" not in message.lower()
+
+
+class _RaisingRawClient:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    async def _request_bytes(self, *args, **kwargs):
+        raise self._exc
+
+
+def test_timeout_reports_readable_error() -> None:
+    stub = _RaisingRawClient(NetworkTimeoutError("timed out"))
+    client = MieleLanClient(stub, route="000000000000")
+    with pytest.raises(HomeAssistantError) as exc_info:
+        _run(client.start_process())
+    assert str(exc_info.value) == "The appliance did not respond to the command (timeout)."
+
+
+def test_connection_error_reports_readable_error() -> None:
+    stub = _RaisingRawClient(NetworkConnectionError("refused"))
+    client = MieleLanClient(stub, route="000000000000")
+    with pytest.raises(HomeAssistantError) as exc_info:
+        _run(client.stop_process())
+    assert str(exc_info.value) == "Could not connect to the appliance."
 
 
 # --- precondition: laundry ---------------------------------------------------
