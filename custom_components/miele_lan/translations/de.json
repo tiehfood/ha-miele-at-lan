@@ -60,7 +60,6 @@
       "oauth_failed": "Cloud-Login fehlgeschlagen — Code abgelehnt oder Token-Endpunkt hat einen Fehler gemeldet.",
       "groupkey_failed": "Household GroupKey konnte nicht aus der Miele-Cloud abgerufen werden — Account ohne gepaarte Geräte oder API hat die Anfrage abgelehnt.",
       "not_miele": "Kein Miele-Gerät — ignoriert.",
-      "manual_setup": "Bitte über „Integration hinzufügen → Miele@LAN“ einrichten.",
       "no_integration": "Miele@LAN ist noch nicht eingerichtet. Bitte über „Integration hinzufügen → Miele@LAN“ starten.",
       "different_household": "Gerät gehört zu einem anderen Miele-Haushalt.",
       "reloaded": "Konfiguration wird neu geladen, neues Geraet wird automatisch erkannt."
@@ -1253,15 +1252,6 @@
       },
       "dns_server": {
         "name": "DNS-Server"
-      },
-      "door_zone_1": {
-        "name": "Tür Zone 1"
-      },
-      "door_zone_2": {
-        "name": "Tür Zone 2"
-      },
-      "door_zone_3": {
-        "name": "Tür Zone 3"
       },
       "program_id_raw": {
         "name": "Programm-ID (raw)",
