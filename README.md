@@ -33,19 +33,17 @@ Local Home Assistant integration for Miele@home appliances — ovens, hobs, dish
 
 | Family | Models | Sensors | Controls |
 |---|---|---|---|
-| **Oven** (incl. steam, combi, microwave) | H7560BP, H7164BP, DGC7860HCXL, DGM7440, … | status, program, phase, remaining/elapsed/start time, cavity & core temps, target & core-target, door, signals, light | stop, wake, power, light, target temp* |
+| **Oven** (incl. steam, combi, microwave) | H7560BP, H7164BP, DGC7860HCXL, DGM7440, … | status, program, phase, remaining/elapsed/start time, cavity & core temps, target & core-target, door, signals, light | stop, wake, power, light |
 | **Hob** | KM7576, KM7895 FL induction, induction + extractor | per-zone power (1..12 incl. ½ steps, boost/boost+, keep-warm), per-zone residual heat, per-zone timer, status | — |
 | **Dishwasher** | G7000-series + semi-pro/professional | status, program, phase, remaining/elapsed time, door, signals | start / stop / pause / resume, wake, power |
 | **Washer / dryer / washer-dryer** | WWG/TWC/WWV/WTV series | status, program, phase, drying step, remaining/elapsed/start time, door, signals | start / stop, wake |
 | **Fridge / freezer / fridge-freezer** | KF 7772 B, K 7000, KFN, KFNS, … | per-zone current + target temp, per-zone door, SuperCool, SuperFreeze, failure | — *(see Limitations)* |
 | **Wine cabinet** | KWT 6000, KWNS, KWTUS, wine + freezer | per-zone temp, per-zone door, light state | — *(see Limitations)* |
 | **Hood / range vent** | DA series, EK039W | fan step, light state, grease & charcoal filter saturation† | fan (off / 1-3 / boost)†, fan run-on time†, light |
-| **Coffee system** | CVA series | status, program, phase | start, stop, pause, wake, power |
-| **Dish warmer** | ESW series | status | start, stop, wake, power |
+| **Coffee system** | CVA series | status | wake, power, light |
+| **Dish warmer** | ESW series | status, door | wake, power |
 
 Diagnostic entities (raw enums, WLAN info, push state, firmware version) are created but disabled by default — enable them per device under **Configure entities**.
-
-\* Oven setpoint writes work where firmware honours `MobileStart` (RE'd on H7560BP). Some appliances may need MobileStart enabled on the panel.
 
 † Hood ventilation, run-on time and filter saturation use the legacy Dop1 protocol, which the official Miele app itself picks for hoods reporting `ProtocolVersion 2` — the DOP2 path every other control here uses answers HTTP 404 on this hardware. Hoods reporting 3/4 keep the read-only fan-step sensor and the light.
 
