@@ -107,6 +107,16 @@ OPCODE_PROGRAM_STOP = 0x36
 OPCODE_PROGRAM_ABORT = 0x37
 OPCODE_PROGRAM_FINALIZE = 0x38
 
+# DOP2 leaf 2/1586 (GLOBAL_EnumApplianceState) — what the official Miele app
+# actually calls for its power toggle (SetApplianceStateAsync), not
+# GLOBAL_USER_REQ SWITCH_ON/SWITCH_OFF above. Hardware-verified on a Backoven
+# H7560BP, firmware 09.14: on 500 (device asleep) the app wakes it, waits 3s,
+# and retries once before giving up — see MieleLanClient.set_power.
+APPLIANCE_STATE_UNIT = 2
+APPLIANCE_STATE_LEAF = 1586
+APPLIANCE_STATE_ON = 4    # GLOBAL_EnumApplianceState.NORMAL
+APPLIANCE_STATE_OFF = 1   # GLOBAL_EnumApplianceState.OFF
+
 # ---------------------------------------------------------------------------
 # Legacy "Dop1" objects (hood ventilation, hood light, hood settings)
 # ---------------------------------------------------------------------------

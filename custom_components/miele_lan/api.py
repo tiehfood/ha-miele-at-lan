@@ -42,6 +42,10 @@ from asyncmiele.utils.http_consts import (
 )
 
 from .const import (
+    APPLIANCE_STATE_LEAF,
+    APPLIANCE_STATE_OFF,
+    APPLIANCE_STATE_ON,
+    APPLIANCE_STATE_UNIT,
     DEVICE_ACTION_WAKE,
     DISHWASHER_FAMILY,
     DOP1_LIGHTINGMODE_COOKING,
@@ -110,6 +114,29 @@ def build_user_request_payload(opcode: int) -> bytes:
     if not 0 <= opcode <= 0xFF:
         raise ValueError(f"opcode out of range: {opcode}")
     return _OVEN_REQ_PREFIX + bytes([opcode]) + _OVEN_REQ_SUFFIX
+
+
+def build_appliance_state_payload(on: bool) -> bytes:
+    """Build the 32-byte DOP2 write payload for leaf 2/1586 (appliance state).
+
+    Single-attribute write of an E8 (one-byte enum): 14-byte header (length,
+    unit, leaf, idx1, idx2, attribute count, attribute id), then a DataType
+    byte and the value byte, padded with 0x20 to a 32-byte block.
+    """
+    value = APPLIANCE_STATE_ON if on else APPLIANCE_STATE_OFF
+    body = struct.pack(
+        ">HHHHHHHBB",
+        14,  # declared length: 6-byte attribute object (count+id+type+value) + 8-byte unit/leaf/idx1/idx2
+        APPLIANCE_STATE_UNIT,
+        APPLIANCE_STATE_LEAF,
+        0,  # idx1
+        0,  # idx2
+        1,  # attribute count
+        1,  # attribute id
+        0x04,  # DataType E8 (one byte)
+        value,
+    )
+    return body + b"\x20" * (32 - len(body))
 
 
 def _check_dishwasher_precondition(state: dict[str, Any], action: int) -> str | None:
@@ -654,11 +681,70 @@ class MieleLanClient:
         """Turn interior light off via the clean /State JSON API."""
         await self._put_state({"Light": 2})
 
-    async def switch_on(self) -> None:
-        await self.write_user_request(OPCODE_SWITCH_ON)
+    async def set_power(self, on: bool) -> None:
+        """Switch appliance power via DOP2 leaf 2/1586 (appliance state).
 
-    async def switch_off(self) -> None:
-        await self.write_user_request(OPCODE_SWITCH_OFF)
+        This is the mechanism the official Miele app itself uses for its
+        power toggle (`SetApplianceStateAsync`), not GLOBAL_USER_REQ
+        SWITCH_ON/SWITCH_OFF. Hardware-verified: a write while the
+        appliance's network is asleep answers HTTP 500; the app's own
+        recovery is to wake it (`PUT /State {"DeviceAction": 2}`), wait 3s,
+        and retry once before giving up — we do the same. Any failure
+        besides a first-try 500 (a non-500 HTTP status, a network error, or
+        a failed retry) falls back to the existing GLOBAL_USER_REQ write so
+        the user still sees today's mapped error messages if both fail.
+        """
+        payload = build_appliance_state_payload(on)
+        resource = (
+            f"/Devices/{self._route}/DOP2/"
+            f"{APPLIANCE_STATE_UNIT}/{APPLIANCE_STATE_LEAF}?idx1=0&idx2=0"
+        )
+        fallback_opcode = OPCODE_SWITCH_ON if on else OPCODE_SWITCH_OFF
+
+        async def _write() -> None:
+            await self._client._request_bytes(
+                "PUT", resource, body=payload, allowed_status=(200, 204)
+            )
+
+        try:
+            await _write()
+            return
+        except ResponseError as exc:
+            if exc.status_code != 500:
+                _LOGGER.debug(
+                    "appliance-state write (2/%d) returned HTTP %d, falling back "
+                    "to GLOBAL_USER_REQ",
+                    APPLIANCE_STATE_LEAF,
+                    exc.status_code,
+                )
+                await self.write_user_request(fallback_opcode)
+                return
+        except (NetworkTimeoutError, NetworkConnectionError) as exc:
+            _LOGGER.debug(
+                "appliance-state write (2/%d) failed (%s), falling back to "
+                "GLOBAL_USER_REQ",
+                APPLIANCE_STATE_LEAF,
+                exc,
+            )
+            await self.write_user_request(fallback_opcode)
+            return
+
+        try:
+            await self.wake()
+        except (ResponseError, NetworkTimeoutError, NetworkConnectionError):
+            pass
+        await asyncio.sleep(3)
+
+        try:
+            await _write()
+        except (ResponseError, NetworkTimeoutError, NetworkConnectionError) as exc:
+            _LOGGER.debug(
+                "appliance-state write (2/%d) failed again after wake (%s), "
+                "falling back to GLOBAL_USER_REQ",
+                APPLIANCE_STATE_LEAF,
+                exc,
+            )
+            await self.write_user_request(fallback_opcode)
 
     # --- legacy Dop1 writes (hood ventilation / light / settings) -----------
 

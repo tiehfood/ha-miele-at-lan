@@ -1,8 +1,10 @@
 """Miele@LAN switches — per-device-type filtered.
 
 * **Power** (oven-family / dishwasher / coffee-system / etc.) maps
-  `Status != 1 (Off)` ↔ DOP2 SWITCH_ON / SWITCH_OFF opcodes. Dop1-capable
-  hoods are excluded — see `const.wants_power_switch`.
+  `Status != 1 (Off)` ↔ `MieleLanClient.set_power`, which writes DOP2 leaf
+  2/1586 (appliance state) the way the official app does, falling back to
+  the GLOBAL_USER_REQ SWITCH_ON / SWITCH_OFF opcodes. Dop1-capable hoods
+  are excluded — see `const.wants_power_switch`.
 
 Cooling-family SuperCool/SuperFreeze are NOT switches — see binary_sensor.py.
 Confirmed 2026-05-22: the K7000 / EK057* fridge firmware blocks LAN writes
@@ -62,8 +64,8 @@ SWITCH_TYPES: tuple[MieleLanSwitchDef, ...] = (
             translation_key="power_switch",
             device_class=SwitchDeviceClass.SWITCH,
             is_on_fn=lambda s: (s.get("Status") is not None and s["Status"] != 1),
-            turn_on_fn=lambda c: c.switch_on(),
-            turn_off_fn=lambda c: c.switch_off(),
+            turn_on_fn=lambda c: c.set_power(True),
+            turn_off_fn=lambda c: c.set_power(False),
         ),
     ),
 )
