@@ -518,6 +518,12 @@ class MieleLanClient:
                 _LOGGER.debug("/State write %r returned 400 (likely no-op)", body)
                 return {}
             raise
+        except NetworkTimeoutError as exc:
+            raise HomeAssistantError(
+                "The appliance did not respond to the command (timeout)."
+            ) from exc
+        except NetworkConnectionError as exc:
+            raise HomeAssistantError("Could not connect to the appliance.") from exc
         if status == 204 or not raw:
             return {}
         text = raw.decode("utf-8", errors="replace").strip()
@@ -670,6 +676,12 @@ class MieleLanClient:
             raise HomeAssistantError(
                 f"Remote command failed (HTTP {status})."
             ) from exc
+        except NetworkTimeoutError as exc:
+            raise HomeAssistantError(
+                "The appliance did not respond to the command (timeout)."
+            ) from exc
+        except NetworkConnectionError as exc:
+            raise HomeAssistantError("Could not connect to the appliance.") from exc
 
     # --- light / power convenience ------------------------------------------
 
@@ -731,7 +743,7 @@ class MieleLanClient:
 
         try:
             await self.wake()
-        except (ResponseError, NetworkTimeoutError, NetworkConnectionError):
+        except (ResponseError, HomeAssistantError):
             pass
         await asyncio.sleep(3)
 

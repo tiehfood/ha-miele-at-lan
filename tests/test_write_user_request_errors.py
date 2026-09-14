@@ -12,7 +12,11 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from asyncmiele.exceptions.network import ResponseError  # noqa: E402
+from asyncmiele.exceptions.network import (  # noqa: E402
+    NetworkConnectionError,
+    NetworkTimeoutError,
+    ResponseError,
+)
 from homeassistant.exceptions import HomeAssistantError  # noqa: E402
 
 from custom_components.miele_lan.api import MieleLanClient  # noqa: E402
@@ -25,6 +29,14 @@ class _StubRawClient:
 
     async def _request_bytes(self, *args, **kwargs):
         raise ResponseError(self._status_code, "stub failure")
+
+
+class _RaisingRawClient:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    async def _request_bytes(self, *args, **kwargs):
+        raise self._exc
 
 
 def _write_user_request(status_code: int) -> str:
@@ -54,3 +66,21 @@ def test_500_does_not_blame_a_setting() -> None:
 def test_other_status_reports_generic_failure() -> None:
     message = _write_user_request(409)
     assert "409" in message
+
+
+def test_network_timeout_reports_readable_error() -> None:
+    client = MieleLanClient(
+        _RaisingRawClient(NetworkTimeoutError("timed out")), route="000000000000"
+    )
+    with pytest.raises(HomeAssistantError) as exc_info:
+        asyncio.run(client.write_user_request(OPCODE_SWITCH_OFF))
+    assert str(exc_info.value) == "The appliance did not respond to the command (timeout)."
+
+
+def test_network_connection_error_reports_readable_error() -> None:
+    client = MieleLanClient(
+        _RaisingRawClient(NetworkConnectionError("refused")), route="000000000000"
+    )
+    with pytest.raises(HomeAssistantError) as exc_info:
+        asyncio.run(client.write_user_request(OPCODE_SWITCH_OFF))
+    assert str(exc_info.value) == "Could not connect to the appliance."

@@ -163,6 +163,51 @@ def test_both_paths_fail_raises_mapped_error(monkeypatch: pytest.MonkeyPatch) ->
     assert "500" in str(exc_info.value)
 
 
+def test_network_failure_on_fallback_surfaces_readable_error() -> None:
+    stub = _QueuedRawClient(
+        [NetworkTimeoutError("timed out"), NetworkTimeoutError("timed out again")]
+    )
+    client = MieleLanClient(stub, route="000000000000")
+    with pytest.raises(HomeAssistantError) as exc_info:
+        _run(client.set_power(True))
+    assert str(exc_info.value) == "The appliance did not respond to the command (timeout)."
+    assert [c[1] for c in stub.calls] == [DOP2_1586_RESOURCE, DOP2_1583_RESOURCE]
+
+
+def test_wake_network_timeout_still_retries_then_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """wake() routes through the real _put_state, which now converts a
+    NetworkTimeoutError into a HomeAssistantError — set_power's wake catch
+    must still swallow that and continue the retry-then-fallback flow.
+    """
+    sleeps: list[float] = []
+
+    async def _fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr("custom_components.miele_lan.api.asyncio.sleep", _fake_sleep)
+
+    stub = _QueuedRawClient(
+        [
+            ResponseError(500, "asleep"),
+            NetworkTimeoutError("wake timed out"),
+            ResponseError(500, "still asleep"),
+            204,
+        ]
+    )
+    client = MieleLanClient(stub, route="000000000000")
+    _run(client.set_power(True))
+
+    assert [c[1] for c in stub.calls] == [
+        DOP2_1586_RESOURCE,
+        STATE_RESOURCE,
+        DOP2_1586_RESOURCE,
+        DOP2_1583_RESOURCE,
+    ]
+    assert sleeps == [3]
+
+
 def test_wake_raising_still_retries_then_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _fake_sleep(seconds: float) -> None:
         return None
