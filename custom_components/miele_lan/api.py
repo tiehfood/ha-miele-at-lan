@@ -719,34 +719,49 @@ class MieleLanClient:
         )
         fallback_opcode = OPCODE_SWITCH_ON if on else OPCODE_SWITCH_OFF
 
-        async def _write() -> None:
-            await self._client._request_bytes(
+        async def _write() -> int:
+            status, _ = await self._client._request_bytes(
                 "PUT", resource, body=payload, allowed_status=(200, 204)
             )
+            return status
 
         try:
-            await _write()
+            status = await _write()
+            _LOGGER.debug(
+                "appliance-state write (2/%d, on=%s) accepted with HTTP %d",
+                APPLIANCE_STATE_LEAF,
+                on,
+                status,
+            )
             return
         except ResponseError as exc:
             if exc.status_code != 500:
                 _LOGGER.debug(
-                    "appliance-state write (2/%d) returned HTTP %d, falling back "
-                    "to GLOBAL_USER_REQ",
+                    "appliance-state write (2/%d, on=%s) returned HTTP %d, "
+                    "falling back to GLOBAL_USER_REQ",
                     APPLIANCE_STATE_LEAF,
+                    on,
                     exc.status_code,
                 )
                 await self.write_user_request(fallback_opcode)
                 return
         except (NetworkTimeoutError, NetworkConnectionError) as exc:
             _LOGGER.debug(
-                "appliance-state write (2/%d) failed (%s), falling back to "
-                "GLOBAL_USER_REQ",
+                "appliance-state write (2/%d, on=%s) failed (%s), falling back "
+                "to GLOBAL_USER_REQ",
                 APPLIANCE_STATE_LEAF,
+                on,
                 exc,
             )
             await self.write_user_request(fallback_opcode)
             return
 
+        _LOGGER.debug(
+            "appliance-state write (2/%d, on=%s) returned HTTP 500, waking "
+            "appliance and retrying",
+            APPLIANCE_STATE_LEAF,
+            on,
+        )
         try:
             await self.wake()
         except (ResponseError, HomeAssistantError):
@@ -754,12 +769,20 @@ class MieleLanClient:
         await asyncio.sleep(3)
 
         try:
-            await _write()
+            status = await _write()
+            _LOGGER.debug(
+                "appliance-state write (2/%d, on=%s) accepted with HTTP %d "
+                "after wake and retry",
+                APPLIANCE_STATE_LEAF,
+                on,
+                status,
+            )
         except (ResponseError, NetworkTimeoutError, NetworkConnectionError) as exc:
             _LOGGER.debug(
-                "appliance-state write (2/%d) failed again after wake (%s), "
-                "falling back to GLOBAL_USER_REQ",
+                "appliance-state write (2/%d, on=%s) failed again after wake "
+                "(%s), falling back to GLOBAL_USER_REQ",
                 APPLIANCE_STATE_LEAF,
+                on,
                 exc,
             )
             await self.write_user_request(fallback_opcode)

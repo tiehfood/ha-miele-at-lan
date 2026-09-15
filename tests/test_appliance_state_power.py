@@ -80,14 +80,18 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def test_success_on_first_try_no_wake_no_fallback() -> None:
+def test_success_on_first_try_no_wake_no_fallback(caplog: pytest.LogCaptureFixture) -> None:
     stub = _QueuedRawClient([204])
     client = MieleLanClient(stub, route="000000000000")
-    _run(client.set_power(True))
+    with caplog.at_level("DEBUG"):
+        _run(client.set_power(True))
     assert [c[1] for c in stub.calls] == [DOP2_1586_RESOURCE]
+    assert "appliance-state write (2/1586, on=True) accepted with HTTP 204" in caplog.text
 
 
-def test_500_then_wake_then_retry_204_no_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_500_then_wake_then_retry_204_no_fallback(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     sleeps: list[float] = []
 
     async def _fake_sleep(seconds: float) -> None:
@@ -97,7 +101,8 @@ def test_500_then_wake_then_retry_204_no_fallback(monkeypatch: pytest.MonkeyPatc
 
     stub = _QueuedRawClient([ResponseError(500, "asleep"), 200, 204])
     client = MieleLanClient(stub, route="000000000000")
-    _run(client.set_power(True))
+    with caplog.at_level("DEBUG"):
+        _run(client.set_power(True))
 
     assert [c[1] for c in stub.calls] == [
         DOP2_1586_RESOURCE,
@@ -105,9 +110,19 @@ def test_500_then_wake_then_retry_204_no_fallback(monkeypatch: pytest.MonkeyPatc
         DOP2_1586_RESOURCE,
     ]
     assert sleeps == [3]
+    assert (
+        "appliance-state write (2/1586, on=True) returned HTTP 500, waking "
+        "appliance and retrying" in caplog.text
+    )
+    assert (
+        "appliance-state write (2/1586, on=True) accepted with HTTP 204 after "
+        "wake and retry" in caplog.text
+    )
 
 
-def test_500_then_wake_then_retry_500_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_500_then_wake_then_retry_500_falls_back(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     async def _fake_sleep(seconds: float) -> None:
         return None
 
@@ -117,7 +132,8 @@ def test_500_then_wake_then_retry_500_falls_back(monkeypatch: pytest.MonkeyPatch
         [ResponseError(500, "asleep"), 200, ResponseError(500, "still asleep"), 204]
     )
     client = MieleLanClient(stub, route="000000000000")
-    _run(client.set_power(False))
+    with caplog.at_level("DEBUG"):
+        _run(client.set_power(False))
 
     assert [c[1] for c in stub.calls] == [
         DOP2_1586_RESOURCE,
@@ -125,22 +141,36 @@ def test_500_then_wake_then_retry_500_falls_back(monkeypatch: pytest.MonkeyPatch
         DOP2_1586_RESOURCE,
         DOP2_1583_RESOURCE,
     ]
+    assert (
+        "appliance-state write (2/1586, on=False) failed again after wake "
+        "(HTTP error 500: still asleep), falling back to GLOBAL_USER_REQ" in caplog.text
+    )
 
 
-def test_404_on_first_try_no_wake_falls_back() -> None:
+def test_404_on_first_try_no_wake_falls_back(caplog: pytest.LogCaptureFixture) -> None:
     stub = _QueuedRawClient([ResponseError(404, "not found"), 204])
     client = MieleLanClient(stub, route="000000000000")
-    _run(client.set_power(True))
+    with caplog.at_level("DEBUG"):
+        _run(client.set_power(True))
 
     assert [c[1] for c in stub.calls] == [DOP2_1586_RESOURCE, DOP2_1583_RESOURCE]
+    assert (
+        "appliance-state write (2/1586, on=True) returned HTTP 404, falling "
+        "back to GLOBAL_USER_REQ" in caplog.text
+    )
 
 
-def test_network_timeout_on_first_try_falls_back() -> None:
+def test_network_timeout_on_first_try_falls_back(caplog: pytest.LogCaptureFixture) -> None:
     stub = _QueuedRawClient([NetworkTimeoutError("timed out"), 204])
     client = MieleLanClient(stub, route="000000000000")
-    _run(client.set_power(True))
+    with caplog.at_level("DEBUG"):
+        _run(client.set_power(True))
 
     assert [c[1] for c in stub.calls] == [DOP2_1586_RESOURCE, DOP2_1583_RESOURCE]
+    assert (
+        "appliance-state write (2/1586, on=True) failed (timed out), falling "
+        "back to GLOBAL_USER_REQ" in caplog.text
+    )
 
 
 def test_both_paths_fail_raises_mapped_error(monkeypatch: pytest.MonkeyPatch) -> None:
