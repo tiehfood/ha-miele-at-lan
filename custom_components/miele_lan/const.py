@@ -87,7 +87,9 @@ USER_REQUEST_UNIT = 2
 USER_REQUEST_LEAF = 1583
 
 # Opcode → label.  Sourced from MieleDop2Structures.UserRequestOven (akappner/MieleRESTServer)
-# and confirmed alive on H7560BP via DOP2 writes (light, switch on/off).
+# and confirmed working on the H7560BP oven via DOP2 writes (light, switch on/off). Not
+# universal: on a G7310 dishwasher (issue #16) the same opcodes answer HTTP 500 and have
+# never switched the appliance — see set_power's leaf 2/1586 path in api.py.
 OPCODE_NOP = 0x00
 OPCODE_START = 0x01
 OPCODE_STOP = 0x02
@@ -337,17 +339,19 @@ POWERABLE_FAMILY: tuple[MieleAppliance, ...] = (
 
 
 def wants_power_switch(device_type: MieleAppliance, *, hood_dop1_supported: bool) -> bool:
-    """Whether `device_type` should get the DOP2 power switch entity.
+    """Whether `device_type` should get the power switch entity.
 
-    Every other POWERABLE_FAMILY member accepts the switch's DOP2 write
-    (leaf 2/1583). Dop1-capable hoods (ProtocolVersion 2) are the one
+    Dop1-capable hoods (ProtocolVersion 2) are the one POWERABLE_FAMILY
     exception: GLOBAL_USER_REQ answers 404 on them outright (see the
     DOP1_* leaf comment above), and the fan entity already covers on/off
     via `set_fan_level(0)` — a second, permanently-broken entity would
     only confuse users. Non-Dop1 hoods (ProtocolVersion 3/4) get no fan
     entity at all, and we have no evidence either way on whether they
-    accept the DOP2 write, so they keep the switch rather than lose their
-    only remaining power control.
+    accept a DOP2 power write, so they keep the switch rather than lose
+    their only remaining power control. This gate only decides whether
+    the entity exists — `set_power` prefers leaf 2/1586 (what the
+    official app itself uses) with leaf 2/1583 as a fallback, and neither
+    is guaranteed to work on every model in the family.
     """
     if device_type not in POWERABLE_FAMILY:
         return False
