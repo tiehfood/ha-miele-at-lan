@@ -52,6 +52,17 @@ IDENT_MAX_ATTEMPTS = 5  # /Ident is fetched once; these are the retries allowed
                         # when it comes back without the fields entities gate on.
 
 
+def _describe_update_error(err: Exception) -> str:
+    """Name the exception type, appending its message when it has one.
+
+    `str(err)` alone can be empty — a bare `TimeoutError()` is the common
+    case — which renders the coordinator's "Error fetching ... data:" log
+    line with nothing after the colon.
+    """
+    msg = str(err)
+    return f"{type(err).__name__}: {msg}" if msg else type(err).__name__
+
+
 @dataclass
 class MieleLanData:
     """Last-known state for a single device. Mutable on each push/poll."""
@@ -224,7 +235,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
             await self._maybe_refresh_device_context()
             await self._maybe_refresh_hood_filters()
         except Exception as err:  # noqa: BLE001
-            raise UpdateFailed(str(err)) from err
+            raise UpdateFailed(_describe_update_error(err)) from err
         self._apply_adaptive_poll_interval()
         return self._data
 
