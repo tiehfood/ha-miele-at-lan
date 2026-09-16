@@ -112,15 +112,60 @@ def test_500_then_wake_then_retry_204_no_fallback(
     assert sleeps == [3]
     assert (
         "appliance-state write (2/1586, on=True) returned HTTP 500, waking "
-        "appliance and retrying" in caplog.text
+        "appliance and retrying (round 1/2)" in caplog.text
     )
     assert (
         "appliance-state write (2/1586, on=True) accepted with HTTP 204 after "
-        "wake and retry" in caplog.text
+        "wake and retry (round 1/2)" in caplog.text
     )
 
 
-def test_500_then_wake_then_retry_500_falls_back(
+def test_500_then_wake_then_500_then_wake_then_204_no_fallback(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    sleeps: list[float] = []
+
+    async def _fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr("custom_components.miele_lan.api.asyncio.sleep", _fake_sleep)
+
+    stub = _QueuedRawClient(
+        [
+            ResponseError(500, "asleep"),
+            200,
+            ResponseError(500, "still asleep"),
+            200,
+            204,
+        ]
+    )
+    client = MieleLanClient(stub, route="000000000000")
+    with caplog.at_level("DEBUG"):
+        _run(client.set_power(True))
+
+    assert [c[1] for c in stub.calls] == [
+        DOP2_1586_RESOURCE,
+        STATE_RESOURCE,
+        DOP2_1586_RESOURCE,
+        STATE_RESOURCE,
+        DOP2_1586_RESOURCE,
+    ]
+    assert sleeps == [3, 3]
+    assert (
+        "appliance-state write (2/1586, on=True) returned HTTP 500, waking "
+        "appliance and retrying (round 1/2)" in caplog.text
+    )
+    assert (
+        "appliance-state write (2/1586, on=True) returned HTTP 500, waking "
+        "appliance and retrying (round 2/2)" in caplog.text
+    )
+    assert (
+        "appliance-state write (2/1586, on=True) accepted with HTTP 204 after "
+        "wake and retry (round 2/2)" in caplog.text
+    )
+
+
+def test_500_then_wake_then_500_then_wake_then_500_falls_back(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     async def _fake_sleep(seconds: float) -> None:
@@ -129,7 +174,14 @@ def test_500_then_wake_then_retry_500_falls_back(
     monkeypatch.setattr("custom_components.miele_lan.api.asyncio.sleep", _fake_sleep)
 
     stub = _QueuedRawClient(
-        [ResponseError(500, "asleep"), 200, ResponseError(500, "still asleep"), 204]
+        [
+            ResponseError(500, "asleep"),
+            200,
+            ResponseError(500, "still asleep"),
+            200,
+            ResponseError(500, "still asleep again"),
+            204,
+        ]
     )
     client = MieleLanClient(stub, route="000000000000")
     with caplog.at_level("DEBUG"):
@@ -139,11 +191,14 @@ def test_500_then_wake_then_retry_500_falls_back(
         DOP2_1586_RESOURCE,
         STATE_RESOURCE,
         DOP2_1586_RESOURCE,
+        STATE_RESOURCE,
+        DOP2_1586_RESOURCE,
         DOP2_1583_RESOURCE,
     ]
     assert (
         "appliance-state write (2/1586, on=False) failed again after wake "
-        "(HTTP error 500: still asleep), falling back to GLOBAL_USER_REQ" in caplog.text
+        "(round 2/2, HTTP error 500: still asleep again), falling back to "
+        "GLOBAL_USER_REQ" in caplog.text
     )
 
 
@@ -184,6 +239,8 @@ def test_both_paths_fail_raises_mapped_error(monkeypatch: pytest.MonkeyPatch) ->
             ResponseError(500, "asleep"),
             200,
             ResponseError(500, "still asleep"),
+            200,
+            ResponseError(500, "still asleep again"),
             ResponseError(500, "fallback also fails"),
         ]
     )
@@ -204,12 +261,12 @@ def test_network_failure_on_fallback_surfaces_readable_error() -> None:
     assert [c[1] for c in stub.calls] == [DOP2_1586_RESOURCE, DOP2_1583_RESOURCE]
 
 
-def test_wake_network_timeout_still_retries_then_falls_back(
+def test_wake_network_timeout_still_retries_then_succeeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """wake() routes through the real _put_state, which now converts a
     NetworkTimeoutError into a HomeAssistantError — set_power's wake catch
-    must still swallow that and continue the retry-then-fallback flow.
+    must still swallow that and continue the retry flow across both rounds.
     """
     sleeps: list[float] = []
 
@@ -223,6 +280,7 @@ def test_wake_network_timeout_still_retries_then_falls_back(
             ResponseError(500, "asleep"),
             NetworkTimeoutError("wake timed out"),
             ResponseError(500, "still asleep"),
+            NetworkTimeoutError("wake timed out again"),
             204,
         ]
     )
@@ -233,12 +291,15 @@ def test_wake_network_timeout_still_retries_then_falls_back(
         DOP2_1586_RESOURCE,
         STATE_RESOURCE,
         DOP2_1586_RESOURCE,
-        DOP2_1583_RESOURCE,
+        STATE_RESOURCE,
+        DOP2_1586_RESOURCE,
     ]
-    assert sleeps == [3]
+    assert sleeps == [3, 3]
 
 
-def test_wake_raising_still_retries_then_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_wake_raising_in_both_rounds_still_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async def _fake_sleep(seconds: float) -> None:
         return None
 
@@ -247,8 +308,10 @@ def test_wake_raising_still_retries_then_falls_back(monkeypatch: pytest.MonkeyPa
     stub = _QueuedRawClient(
         [
             ResponseError(500, "asleep"),
-            ResponseError(500, "wake also fails"),
-            ResponseError(500, "retry still fails"),
+            ResponseError(500, "wake 1 also fails"),
+            ResponseError(500, "retry 1 still fails"),
+            ResponseError(500, "wake 2 also fails"),
+            ResponseError(500, "retry 2 still fails"),
             204,
         ]
     )
@@ -256,6 +319,8 @@ def test_wake_raising_still_retries_then_falls_back(monkeypatch: pytest.MonkeyPa
     _run(client.set_power(True))
 
     assert [c[1] for c in stub.calls] == [
+        DOP2_1586_RESOURCE,
+        STATE_RESOURCE,
         DOP2_1586_RESOURCE,
         STATE_RESOURCE,
         DOP2_1586_RESOURCE,

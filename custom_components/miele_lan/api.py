@@ -707,10 +707,19 @@ class MieleLanClient:
         SWITCH_ON/SWITCH_OFF. Hardware-verified: a write while the
         appliance's network is asleep answers HTTP 500; the app's own
         recovery is to wake it (`PUT /State {"DeviceAction": 2}`), wait 3s,
-        and retry once before giving up — we do the same. Any failure
-        besides a first-try 500 (a non-500 HTTP status, a network error, or
-        a failed retry) falls back to the existing GLOBAL_USER_REQ write so
-        the user still sees today's mapped error messages if both fail.
+        and retry — we do the same, and repeat that wake-and-retry round up
+        to twice before giving up. One round is not always enough: a G7310
+        dishwasher deep in standby (issue #16) needed a second round to
+        switch on. Only a repeated HTTP 500 earns another round — a
+        non-500 HTTP status or a network error, on the first try or any
+        retry, falls back to the existing GLOBAL_USER_REQ write immediately
+        so the user still sees today's mapped error messages if that also
+        fails. The common case is ~6-7s, dominated by the two 3s sleeps.
+        The reachable ceiling is ~46s: round 1's wake, round 2's wake,
+        round 2's retry, and the fallback write can each hit the 10s
+        client timeout, on top of the two fixed 3s sleeps — a timeout on
+        the initial write or on round 1's retry can't add to this ceiling,
+        since either falls back immediately instead of continuing.
         """
         payload = build_appliance_state_payload(on)
         resource = (
@@ -718,6 +727,7 @@ class MieleLanClient:
             f"{APPLIANCE_STATE_UNIT}/{APPLIANCE_STATE_LEAF}?idx1=0&idx2=0"
         )
         fallback_opcode = OPCODE_SWITCH_ON if on else OPCODE_SWITCH_OFF
+        max_rounds = 2
 
         async def _write() -> int:
             status, _ = await self._client._request_bytes(
@@ -756,36 +766,60 @@ class MieleLanClient:
             await self.write_user_request(fallback_opcode)
             return
 
-        _LOGGER.debug(
-            "appliance-state write (2/%d, on=%s) returned HTTP 500, waking "
-            "appliance and retrying",
-            APPLIANCE_STATE_LEAF,
-            on,
-        )
-        try:
-            await self.wake()
-        except (ResponseError, HomeAssistantError):
-            pass
-        await asyncio.sleep(3)
+        for round_num in range(1, max_rounds + 1):
+            _LOGGER.debug(
+                "appliance-state write (2/%d, on=%s) returned HTTP 500, waking "
+                "appliance and retrying (round %d/%d)",
+                APPLIANCE_STATE_LEAF,
+                on,
+                round_num,
+                max_rounds,
+            )
+            try:
+                await self.wake()
+            except (ResponseError, HomeAssistantError):
+                pass
+            await asyncio.sleep(3)
 
-        try:
-            status = await _write()
-            _LOGGER.debug(
-                "appliance-state write (2/%d, on=%s) accepted with HTTP %d "
-                "after wake and retry",
-                APPLIANCE_STATE_LEAF,
-                on,
-                status,
-            )
-        except (ResponseError, NetworkTimeoutError, NetworkConnectionError) as exc:
-            _LOGGER.debug(
-                "appliance-state write (2/%d, on=%s) failed again after wake "
-                "(%s), falling back to GLOBAL_USER_REQ",
-                APPLIANCE_STATE_LEAF,
-                on,
-                exc,
-            )
-            await self.write_user_request(fallback_opcode)
+            try:
+                status = await _write()
+            except ResponseError as exc:
+                if exc.status_code == 500 and round_num < max_rounds:
+                    continue
+                _LOGGER.debug(
+                    "appliance-state write (2/%d, on=%s) failed again after "
+                    "wake (round %d/%d, %s), falling back to GLOBAL_USER_REQ",
+                    APPLIANCE_STATE_LEAF,
+                    on,
+                    round_num,
+                    max_rounds,
+                    exc,
+                )
+                await self.write_user_request(fallback_opcode)
+                return
+            except (NetworkTimeoutError, NetworkConnectionError) as exc:
+                _LOGGER.debug(
+                    "appliance-state write (2/%d, on=%s) failed again after "
+                    "wake (round %d/%d, %s), falling back to GLOBAL_USER_REQ",
+                    APPLIANCE_STATE_LEAF,
+                    on,
+                    round_num,
+                    max_rounds,
+                    exc,
+                )
+                await self.write_user_request(fallback_opcode)
+                return
+            else:
+                _LOGGER.debug(
+                    "appliance-state write (2/%d, on=%s) accepted with HTTP %d "
+                    "after wake and retry (round %d/%d)",
+                    APPLIANCE_STATE_LEAF,
+                    on,
+                    status,
+                    round_num,
+                    max_rounds,
+                )
+                return
 
     # --- legacy Dop1 writes (hood ventilation / light / settings) -----------
 
