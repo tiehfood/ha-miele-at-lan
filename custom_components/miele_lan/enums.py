@@ -186,6 +186,7 @@ DishWasherProgramId: dict[int, str] = {
     1: 'intensive',
     2: 'maintenance',
     3: 'eco',
+    5: 'normal',
     6: 'automatic',
     7: 'automatic',
     9: 'solar_save',
