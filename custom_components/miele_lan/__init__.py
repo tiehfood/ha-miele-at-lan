@@ -109,6 +109,23 @@ def _merge_mdns_adoptions(
     return devices + adopted, adopted
 
 
+def _push_unmatched_fab_action(
+    expected_fabs: set[str], setup_complete: bool, fab: str,
+) -> tuple[str, int]:
+    """Decide how loudly to log a push whose fab has no coordinator yet.
+
+    Enrollment creates a device's `/Subscriptions` entry (so the appliance
+    starts pushing) before `_setup_cloud` spawns that device's coordinator —
+    a push for a fab on our worklist during that window is an expected race,
+    not an anomaly. Once setup has finished building every coordinator it
+    expects to, a push with no coordinator is unexplained: a foreign
+    appliance, or one that failed to enrol.
+    """
+    if not setup_complete and fab in expected_fabs:
+        return "setup_in_progress", logging.DEBUG
+    return "unknown", logging.WARNING
+
+
 async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Cloud-pair path: household key already extracted, enrol every device,
     start the push listener, spawn one coordinator per device."""
@@ -148,6 +165,7 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "listener": None,
         "ha_fab": ha_fab,
         "clients": [],
+        "setup_complete": False,
     }
 
     # Grab HA's shared zeroconf so we don't create competing instances.
@@ -219,14 +237,29 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
 
     # Step 2: bring up the push listener (uses the same shared zeroconf).
+    expected_fabs = {d.get("fabNr") or d.get("fab") for d in devices}
+    expected_fabs.discard(None)
+
     async def _on_push(event: PushEvent) -> None:
         coords = bundle["coordinators"]
         coord = coords.get(event.peer_fab)
         if coord is None:
-            _LOGGER.warning(
-                "push for unknown fab %s — no coordinator (known: %s)",
-                event.peer_fab, list(coords.keys()),
+            action, level = _push_unmatched_fab_action(
+                expected_fabs, bundle["setup_complete"], event.peer_fab,
             )
+            if action == "setup_in_progress":
+                _LOGGER.log(
+                    level,
+                    "push for fab %s ignored — setup still in progress, no "
+                    "coordinator yet (expected: %s)",
+                    event.peer_fab, sorted(expected_fabs),
+                )
+            else:
+                _LOGGER.log(
+                    level,
+                    "push for unknown fab %s — no coordinator (known: %s)",
+                    event.peer_fab, list(coords.keys()),
+                )
             return
         coord.apply_push(event)
 
@@ -315,6 +348,8 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             try: await client.__aexit__(None, None, None)
             except Exception: pass
         raise
+
+    bundle["setup_complete"] = True
 
     if not bundle["coordinators"]:
         # No device reachable on the LAN yet. This is recoverable: an
