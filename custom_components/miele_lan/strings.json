@@ -2162,6 +2162,12 @@
       },
       "plate_6_ankochautomatik": {
         "name": "Cooking zone 6 auto pre-boil"
+      },
+      "twindos_1_empty": {
+        "name": "TwinDos compartment 1 empty"
+      },
+      "twindos_2_empty": {
+        "name": "TwinDos compartment 2 empty"
       }
     },
     "switch": {
