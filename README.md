@@ -39,13 +39,15 @@ Local Home Assistant integration for Miele@home appliances — ovens, hobs, dish
 | **Washer / dryer / washer-dryer** | WWG/TWC/WWV/WTV series | status, program, phase, drying step, remaining/elapsed/start time, door, signals | start / stop, wake |
 | **Fridge / freezer / fridge-freezer** | KF 7772 B, K 7000, KFN, KFNS, … | per-zone current + target temp, per-zone door, SuperCool, SuperFreeze, failure | — *(see Limitations)* |
 | **Wine cabinet** | KWT 6000, KWNS, KWTUS, wine + freezer | per-zone temp, per-zone door, light state | — *(see Limitations)* |
-| **Hood / range vent** | DA series, EK039W | fan step, light state, grease & charcoal filter saturation† | fan (off / 1-3 / boost)†, fan run-on time†, light |
+| **Hood / range vent** | DA series, EK039W | fan step, light state, grease & charcoal filter saturation† | fan (off / 1-3 / boost)†, fan run-on time†, light, power‡ |
 | **Coffee system** | CVA series | status | wake, power, light |
 | **Dish warmer** | ESW series | status, door | wake, power |
 
 Diagnostic entities (raw enums, WLAN info, push state, firmware version) are created but disabled by default — enable them per device under **Configure entities**.
 
-† Hood ventilation, run-on time and filter saturation use the legacy Dop1 protocol, which the official Miele app itself picks for hoods reporting `ProtocolVersion 2` — the DOP2 path every other control here uses answers HTTP 404 on this hardware. Hoods reporting 3/4 keep the read-only fan-step sensor and the light.
+† Hood ventilation, run-on time and filter saturation use the legacy Dop1 protocol, which the official Miele app itself picks for hoods reporting `ProtocolVersion 2` — the DOP2 path every other control here uses answers HTTP 404 on this hardware. Hoods reporting 3/4 keep the read-only fan-step sensor and the light, and get a power switch instead (see next footnote).
+
+‡ Power switch only appears for hoods reporting `ProtocolVersion 3/4`. Dop1-capable hoods already expose off via the fan entity's own on/off control, and GLOBAL_USER_REQ — the opcode the switch falls back to — answers HTTP 404 on them, so a second, non-functional switch would only confuse users.
 
 ## Installation
 
