@@ -847,6 +847,12 @@ class MieleLanClient:
             raise HomeAssistantError(
                 f"{what} failed (HTTP {exc.status_code})."
             ) from exc
+        except NetworkTimeoutError as exc:
+            raise HomeAssistantError(
+                "The appliance did not respond to the command (timeout)."
+            ) from exc
+        except NetworkConnectionError as exc:
+            raise HomeAssistantError("Could not connect to the appliance.") from exc
 
     async def set_fan_level(self, level: int) -> None:
         """Set the hood's ventilation level (0 = off, 1-3, 4 = boost).
