@@ -912,5 +912,5 @@ class MieleLanClient:
         return parse_dop1_setting_pf_value(response_hex, pf_id)
 
     # Cooling-family target-temperature writes are not supported via the LAN
-    # protocol — see custom_components/miele_lan/climate.py for the RE notes.
-    # The climate entity is read-only by design.
+    # protocol: the fridge's LAN HTTP server rejects every PUT/POST with 403
+    # regardless of signature, so any cooling entity is read-only by design.
