@@ -977,7 +977,6 @@
           "deep_standby": "Tiefschlaf",
           "going_to_standby": "Wechselt in Standby",
           "network_idle": "Netzwerk-Leerlauf",
-          "not_in_standby": "Aktiv",
           "unknown": "Unbekannt"
         }
       },

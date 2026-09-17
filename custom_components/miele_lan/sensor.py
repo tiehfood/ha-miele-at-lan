@@ -126,7 +126,7 @@ PROCESS_ACTION_LABELS = {
     PROCESS_ACTION_PAUSE: "pause",
 }
 DEVICE_ACTION_LABELS = {0: "no_action", 1: "start_remote", 2: "wake_up", 3: "go_to_standby"}
-STANDBY_STATE_LABELS = {0: "not_in_standby", 1: "network_idle", 2: "deep_standby", 3: "going_to_standby"}
+STANDBY_STATE_LABELS = {0: "unknown", 1: "network_idle", 2: "deep_standby", 3: "going_to_standby"}
 SYNC_STATE_LABELS = {0: "unknown", 1: "synced", 2: "out_of_sync"}
 REMOTE_LABELS = {0: "disabled", 7: "enabled_but_not_possible", 15: "full"}
 
@@ -446,7 +446,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             translation_key="standby_state",
             entity_category=EntityCategory.DIAGNOSTIC,
             device_class=SensorDeviceClass.ENUM,
-            options=[*sorted(set(STANDBY_STATE_LABELS.values())), "unknown"],
+            options=sorted({*STANDBY_STATE_LABELS.values(), "unknown"}),
             required_state_key="StandbyState",
             value_fn=lambda s: _enum_option(s, "StandbyState", STANDBY_STATE_LABELS),
         ),

@@ -977,7 +977,6 @@
           "deep_standby": "Deep standby",
           "going_to_standby": "Going to standby",
           "network_idle": "Network idle",
-          "not_in_standby": "Active",
           "unknown": "Unknown"
         }
       },
