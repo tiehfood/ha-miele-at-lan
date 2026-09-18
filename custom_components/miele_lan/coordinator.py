@@ -25,6 +25,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import MieleLanClient
 from .const import (
     DOMAIN,
+    HOB_FAMILY,
     LAUNDRY_FAMILY,
     OVEN_FAMILY,
     PF_DA_FETTFILTER_GRENZE_AKTUELL,
@@ -149,6 +150,16 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         if isinstance(raw, str) and raw.isdigit():
             return int(raw)
         return None
+
+    @property
+    def hob_extractor_speed_supported(self) -> bool:
+        """Whether this model has a verified extractor ExtendedState layout.
+
+        KMDA7876 can identify as an ordinary induction hob, so device type
+        74 alone is insufficient. Do not enable this for unverified models.
+        """
+        model = "".join(str(self._data.ident.get("tech_type") or "").upper().split())
+        return self.device_type in HOB_FAMILY and model == "KMDA7876"
 
     @property
     def hood_dop1_supported(self) -> bool:

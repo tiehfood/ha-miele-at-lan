@@ -1,6 +1,6 @@
-"""Miele@LAN fan — hood ventilation control over the legacy Dop1 protocol.
+"""Miele@LAN fans — hood control and read-only integrated extractors.
 
-Only created for hoods that take the Dop1 writes (see
+Hood controls are only created for hoods that take the Dop1 writes (see
 `MieleLanCoordinator.hood_dop1_supported` for the gate and const.py for the
 wire format). GLOBAL_USER_REQ, the mechanism every other control entity in
 this integration uses, answers HTTP 404 on these appliances, which is why
@@ -11,6 +11,9 @@ discrete labeled steps, and "Boost" isn't the top of a linear scale, so
 mapping it onto 100% would misrepresent it. Turning the fan on takes a few
 seconds to show up in `/State.VentilationStep` while the motor spins up; the
 push channel delivers that update when it lands.
+
+Integrated extractors use their verified ExtendedState layout for read-only
+speed reporting, matching the official integration's four-speed fan entity.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import MieleLanCoordinator
 from .entity import MieleLanEntity
+from .extended_state import EXTRACTOR_SPEED_LABELS, parse_kmda7876_extractor_speed
 
 # Luefterstufe -> preset label. Step 4 is labeled "Boost" on the appliance,
 # not "level 4". Step 5 (interval ventilation) is a real panel mode but isn't
@@ -37,6 +41,9 @@ from .entity import MieleLanEntity
 LEVEL_TO_PRESET: dict[int, str] = {1: "1", 2: "2", 3: "3", 4: "boost"}
 PRESET_TO_LEVEL: dict[str, int] = {v: k for k, v in LEVEL_TO_PRESET.items()}
 PRESET_MODES: list[str] = list(LEVEL_TO_PRESET.values())
+EXTRACTOR_PERCENTAGES = {
+    label: step * 25 for step, label in EXTRACTOR_SPEED_LABELS.items()
+}
 
 
 async def async_setup_entry(
@@ -51,7 +58,43 @@ async def async_setup_entry(
         state = coord.data.state if coord.data else {}
         if coord.hood_dop1_supported and "VentilationStep" in state:
             entities.append(MieleLanFan(coord))
+        if coord.hob_extractor_speed_supported:
+            entities.append(MieleLanExtractorFan(coord))
     async_add_entities(entities)
+
+
+class MieleLanExtractorFan(MieleLanEntity, FanEntity):
+    """Read-only KMDA7876 extractor; percentages represent four discrete speeds."""
+
+    _attr_supported_features = FanEntityFeature(0)
+    _attr_speed_count = 4
+    entity_description = FanEntityDescription(
+        key="extractor",
+        translation_key="extractor",
+    )
+
+    def __init__(self, coordinator: MieleLanCoordinator) -> None:
+        super().__init__(coordinator, "extractor")
+
+    @property
+    def percentage(self) -> int | None:
+        if not self.coordinator.data:
+            return None
+        speed = parse_kmda7876_extractor_speed(
+            self.coordinator.data.state.get("ExtendedState")
+        )
+        return EXTRACTOR_PERCENTAGES.get(speed)
+
+    @property
+    def is_on(self) -> bool | None:
+        percentage = self.percentage
+        return None if percentage is None else percentage > 0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, int | None]:
+        # HA normally exposes percentage only for fans with SET_SPEED.
+        # Publish telemetry without advertising a write capability.
+        return {"percentage": self.percentage, "percentage_step": 25}
 
 
 class MieleLanFan(MieleLanEntity, FanEntity):
