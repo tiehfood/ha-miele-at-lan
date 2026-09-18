@@ -49,6 +49,14 @@ Diagnostic entities (raw enums, WLAN info, push state, firmware version) are cre
 
 ‡ Power switch only appears for hoods reporting `ProtocolVersion 3/4`. Dop1-capable hoods already expose off via the fan entity's own on/off control, and GLOBAL_USER_REQ — the opcode the switch falls back to — answers HTTP 404 on them, so a second, non-functional switch would only confuse users.
 
+### Integrated extractor speed (KMDA7876)
+
+The KMDA7876 exposes a read-only **Extractor speed** sensor: Off, levels 1–3,
+and Boost.
+It also exposes a read-only **Extractor** fan entity with on/off state and
+speed percentages (0%, 25%, 50%, 75%, 100%; 100% means Boost). These represent
+discrete speed steps, not measured airflow. Fan controls are not supported.
+
 ## Installation
 
 ### HACS

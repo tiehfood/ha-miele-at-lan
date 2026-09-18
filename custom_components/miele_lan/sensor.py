@@ -29,7 +29,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import enums
-from .extended_state import hob_zone_count, parse_hob_extended_state
+from .extended_state import (
+    EXTRACTOR_SPEED_LABELS,
+    hob_zone_count,
+    parse_hob_extended_state,
+    parse_kmda7876_extractor_speed,
+)
 from .const import (
     COOLING_FAMILY,
     CYCLE_FAMILY,
@@ -263,6 +268,7 @@ class MieleLanIdentSensorDescription(SensorEntityDescription):
 class MieleLanSensorDef:
     types: tuple[MieleAppliance, ...]
     description: MieleLanSensorDescription
+    supported_fn: Callable[[MieleLanCoordinator], bool] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -274,6 +280,18 @@ class MieleLanIdentSensorDef:
 # --- /State-derived sensors ---------------------------------------------------
 
 SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
+    MieleLanSensorDef(
+        types=HOB_FAMILY,
+        description=MieleLanSensorDescription(
+            key="extractor_speed",
+            translation_key="extractor_speed",
+            icon="mdi:fan",
+            device_class=SensorDeviceClass.ENUM,
+            options=list(EXTRACTOR_SPEED_LABELS.values()),
+            value_fn=lambda s: parse_kmda7876_extractor_speed(s.get("ExtendedState")),
+        ),
+        supported_fn=lambda coord: coord.hob_extractor_speed_supported,
+    ),
     # Status — every device
     MieleLanSensorDef(
         types=ALL_TYPES,
@@ -988,6 +1006,8 @@ async def async_setup_entry(
         zone_count = hob_zone_count(state)
         for d in SENSOR_TYPES:
             if dt not in d.types:
+                continue
+            if d.supported_fn is not None and not d.supported_fn(coord):
                 continue
             key = d.description.key
             if key.startswith(("plate_", "cooktop_timer_")):

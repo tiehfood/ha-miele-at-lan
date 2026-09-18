@@ -167,3 +167,28 @@ def hob_zone_count(state: dict) -> int:
     """
     ext = parse_hob_extended_state(state.get("ExtendedState"))
     return len(ext.zones) if ext else 6
+
+
+# Observed on KMDA7876 / EK039W firmware 02.80. Keep the exact layout
+# restriction until other payload versions have been captured and verified.
+KMDA7876_EXTENDED_STATE_LENGTH = 66
+KMDA7876_EXTRACTOR_SPEED_OFFSET = 62
+EXTRACTOR_SPEED_LABELS = {0: "off", 1: "1", 2: "2", 3: "3", 4: "boost"}
+
+
+def parse_kmda7876_extractor_speed(hex_str: str | None) -> str | None:
+    """Read observed KMDA7876 FW 02.80 extractor speed (byte 62).
+
+    Verified with off, levels 1/2/3 and Boost captures. Byte 63 is an
+    unverified flag, not part of the speed. Auto mode is not decoded.
+    The caller must gate this device-specific layout by model.
+    """
+    if not isinstance(hex_str, str):
+        return None
+    try:
+        payload = bytes.fromhex(hex_str)
+    except ValueError:
+        return None
+    if len(payload) != KMDA7876_EXTENDED_STATE_LENGTH:
+        return None
+    return EXTRACTOR_SPEED_LABELS.get(payload[KMDA7876_EXTRACTOR_SPEED_OFFSET])

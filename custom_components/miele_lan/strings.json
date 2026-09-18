@@ -2094,6 +2094,16 @@
       },
       "charcoal_filter_grade": {
         "name": "Charcoal filter saturation"
+      },
+      "extractor_speed": {
+        "name": "Extractor speed",
+        "state": {
+          "off": "Off",
+          "1": "1",
+          "2": "2",
+          "3": "3",
+          "boost": "Boost"
+        }
       }
     },
     "binary_sensor": {
@@ -2201,6 +2211,9 @@
       }
     },
     "fan": {
+      "extractor": {
+        "name": "Extractor"
+      },
       "ventilation": {
         "name": "Ventilation",
         "state_attributes": {
