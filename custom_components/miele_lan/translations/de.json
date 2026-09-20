@@ -2094,6 +2094,16 @@
       },
       "charcoal_filter_grade": {
         "name": "Kohlefilter-Sättigung"
+      },
+      "extractor_speed": {
+        "name": "Abluftstufe",
+        "state": {
+          "off": "Aus",
+          "1": "1",
+          "2": "2",
+          "3": "3",
+          "boost": "Intensivstufe"
+        }
       }
     },
     "binary_sensor": {
@@ -2201,6 +2211,9 @@
       }
     },
     "fan": {
+      "extractor": {
+        "name": "Dunstabzug"
+      },
       "ventilation": {
         "name": "Lüfter",
         "state_attributes": {
