@@ -12,6 +12,7 @@ household.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -51,6 +52,9 @@ HOOD_FILTER_REFRESH_INTERVAL = 3600  # seconds — grease/charcoal filter satura
                                      # creeps up over weeks, so hourly is ample.
 IDENT_MAX_ATTEMPTS = 5  # /Ident is fetched once; these are the retries allowed
                         # when it comes back without the fields entities gate on.
+IDENT_SETUP_RETRY_ATTEMPTS = 3  # bounded retries given to /Ident before platform
+                                # setup forwards entities — see async_ensure_ident_ready.
+IDENT_SETUP_RETRY_DELAY = 1.0  # seconds between those retries.
 
 
 def _describe_update_error(err: Exception) -> str:
@@ -104,6 +108,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         self._data = MieleLanData()
         self._ident_loaded = False
         self._ident_attempts = 0
+        self._ident_setup_attempts = 0
         self._dop2_last_fetch: float = 0.0
         self._hours_unsupported = False
         self._wlan_last_fetch: float = 0.0
@@ -214,6 +219,56 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         if subs:
             return "push:active" if self._push_count else "subs:ready"
         return "polling"
+
+    async def async_ensure_ident_ready(
+        self,
+        attempts: int = IDENT_SETUP_RETRY_ATTEMPTS,
+        delay: float = IDENT_SETUP_RETRY_DELAY,
+    ) -> None:
+        """Give a transient first-refresh /Ident failure a few seconds to heal
+        before platform setup forwards entities.
+
+        `hob_extractor_speed_supported` and `hood_dop1_supported` are read once
+        at forward time — a config-entry reload is the only thing that ever
+        re-evaluates them. If the very first /Ident fetch (during
+        `async_config_entry_first_refresh`) came back empty, the coordinator's
+        own retry-on-empty logic in `_async_update_data` would eventually fix
+        `self._data.ident`, but only on a later poll, long after entities were
+        already forwarded without the gated ones. This closes that window by
+        retrying here, synchronously, before the caller forwards platforms.
+
+        No-op (no sleep, no request) when ident already has what the gates
+        need. Bounded and non-recursive: gives up after `attempts` tries and
+        lets setup proceed — appliances that genuinely never populate ident
+        must keep working exactly as before, just without the gated entities.
+
+        Counts against its own `_ident_setup_attempts`, not `_ident_attempts`
+        — the poll-time budget `_async_update_data` uses against
+        `IDENT_MAX_ATTEMPTS`. A slow-to-answer appliance (10-20s to bring up
+        its HTTP stack) is exactly the case this method exists for; spending
+        the poll-time budget on this burst would leave it fewer, not more,
+        chances to recover before `_ident_loaded` latches `True` for good.
+        """
+        if self._data.ident.get("device_type") or self._data.ident.get("protocol_version") is not None:
+            return
+        for attempt in range(1, attempts + 1):
+            await asyncio.sleep(delay)
+            ident = await self._fetch_full_ident()
+            self._ident_setup_attempts += 1
+            if ident.get("device_type") or ident.get("protocol_version") is not None:
+                self._data.ident = ident
+                self._ident_loaded = True
+                _LOGGER.info(
+                    "[%s] /Ident was empty on first refresh but populated on "
+                    "setup retry %d/%d — capability-gated entities will be created",
+                    self.fab, attempt, attempts,
+                )
+                return
+        _LOGGER.debug(
+            "[%s] /Ident still empty after %d setup retries — proceeding "
+            "without capability-gated entities for this run",
+            self.fab, attempts,
+        )
 
     async def _async_update_data(self) -> MieleLanData:
         """Polled fallback: refresh /State and (once) /Ident; WLAN on slow cadence."""
