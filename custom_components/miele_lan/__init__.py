@@ -394,6 +394,12 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     bundle["options_unsub"] = entry.add_update_listener(_async_options_updated)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = bundle
+    # Entities gated on ident fields (hood fan, hood filters, extractor speed)
+    # are created once below and won't reappear until a reload — give a
+    # transient first-refresh /Ident failure a bounded chance to heal first.
+    await asyncio.gather(
+        *(coord.async_ensure_ident_ready() for coord in bundle["coordinators"].values())
+    )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
