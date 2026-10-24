@@ -13,8 +13,7 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/tiehfood/ha-miele-at-lan/issues",
   "requirements": [
-    "asyncmiele==0.2.6",
-    "cryptography>=41.0.0"
+    "asyncmiele==0.2.6"
   ],
   "version": "1.16.1",
   "zeroconf": [
