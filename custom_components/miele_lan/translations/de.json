@@ -1057,6 +1057,12 @@
       "rinse_aid_level": {
         "name": "Klarspülerfüllstand"
       },
+      "lifetime_energy": {
+        "name": "Gesamter Energieverbrauch"
+      },
+      "lifetime_water": {
+        "name": "Gesamter Wasserverbrauch"
+      },
       "push_mode": {
         "name": "Push-Status",
         "state": {
