@@ -243,3 +243,17 @@ def test_laundry_family_still_polls() -> None:
     asyncio.run(_run(coord))
     assert coord.client.raw.calls == 1
     assert coord._data.device_context.get("dos_containers") is not None
+
+@pytest.mark.parametrize(
+    "device_type",
+    [MieleAppliance.TUMBLE_DRYER, MieleAppliance.WASHING_MACHINE],
+)
+def test_sleeping_laundry_appliance_is_not_woken(device_type: MieleAppliance) -> None:
+    """Waking a washer or dryer switches it on (#65); skip the cycle instead."""
+    coord = _make_coordinator([500], device_type)
+    coord.client.set_statuses([500])
+    asyncio.run(_run(coord))
+    coord.client.wake.assert_not_awaited()
+    assert coord.client.raw.calls == 1
+    assert coord._device_context_miss_cycles == 0
+    assert coord._device_context_unsupported is False
