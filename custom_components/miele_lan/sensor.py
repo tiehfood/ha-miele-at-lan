@@ -22,8 +22,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     REVOLUTIONS_PER_MINUTE,
     EntityCategory,
+    UnitOfEnergy,
     UnitOfTemperature,
     UnitOfTime,
+    UnitOfVolume,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -34,6 +36,8 @@ from .extended_state import (
     hob_zone_count,
     parse_hob_extended_state,
     parse_kmda7876_extractor_speed,
+    parse_wmv960_energy_kwh,
+    parse_wmv960_water_litres,
 )
 from .const import (
     COOLING_FAMILY,
@@ -539,6 +543,39 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             required_state_key="SpinningSpeed",
             value_fn=_gated(lambda s: s.get("SpinningSpeed")),
         ),
+    ),
+    # Cycle energy and water consumption from the washer's ExtendedState.
+    # Model-gated (see washer_consumption_supported): the layout has only been
+    # verified on a WMV960. Not status-gated on purpose: while the machine is
+    # on, the firmware keeps the finished cycle's totals until the next
+    # programme is selected, which is what a total_increasing sensor needs (a
+    # drop to a smaller value on the next cycle is read as a reset). Once the
+    # machine is switched off the blob is empty and the sensors go unknown.
+    MieleLanSensorDef(
+        types=(MieleAppliance.WASHING_MACHINE,),
+        description=MieleLanSensorDescription(
+            key="energy_consumption",
+            translation_key="energy_consumption",
+            device_class=SensorDeviceClass.ENERGY,
+            native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            required_state_key="ExtendedState",
+            value_fn=lambda s: parse_wmv960_energy_kwh(s.get("ExtendedState")),
+        ),
+        supported_fn=lambda coord: coord.washer_consumption_supported,
+    ),
+    MieleLanSensorDef(
+        types=(MieleAppliance.WASHING_MACHINE,),
+        description=MieleLanSensorDescription(
+            key="water_consumption",
+            translation_key="water_consumption",
+            device_class=SensorDeviceClass.WATER,
+            native_unit_of_measurement=UnitOfVolume.LITERS,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            required_state_key="ExtendedState",
+            value_fn=lambda s: parse_wmv960_water_litres(s.get("ExtendedState")),
+        ),
+        supported_fn=lambda coord: coord.washer_consumption_supported,
     ),
     # --- Raw (diagnostic) siblings of gated cycle-family sensors -------------
     # These expose the firmware's last-cached value with no status gating —
