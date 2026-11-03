@@ -34,6 +34,7 @@ from . import enums
 from .extended_state import (
     EXTRACTOR_SPEED_LABELS,
     hob_zone_count,
+    parse_h6800bmx_cavity_temperature,
     parse_hob_extended_state,
     parse_kmda7876_extractor_speed,
     parse_wmv960_energy_kwh,
@@ -55,7 +56,7 @@ from .const import (
     is_idle_state,
     parse_minutes_field as _minutes,
 )
-from .coordinator import MieleLanCoordinator
+from .coordinator import MieleLanCoordinator, MieleLanData
 from .entity import MieleLanEntity
 
 
@@ -247,6 +248,21 @@ def _temp_or_none(temps: Any, idx: int, *, divisor: int = 100) -> int | float | 
     return v / divisor if divisor > 1 else v
 
 
+def _oven_cavity_temperature(data: MieleLanData) -> int | float | None:
+    """/State.Temperature first, then the H6800BMX ExtendedState layout.
+
+    The H6800BMX reports the -32768 sentinel in /State.Temperature while the
+    cavity temperature is in its ExtendedState, so only that model falls back.
+    """
+    value = _temp_or_none(data.state.get("Temperature"), 0)
+    if value is not None:
+        return value
+    model = "".join(str(data.ident.get("tech_type") or "").upper().split())
+    if model != "H6800BMX":
+        return None
+    return parse_h6800bmx_cavity_temperature(data.state.get("ExtendedState"))
+
+
 def _utc_iso_now_plus(minutes: int | None) -> str | None:
     if minutes is None:
         return None
@@ -261,6 +277,9 @@ def _utc_iso_now_plus(minutes: int | None) -> str | None:
 class MieleLanSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any]
     required_state_key: str | None = None
+    # Optional reader that also sees /Ident, for values whose layout depends on
+    # the model. Takes precedence over value_fn.
+    data_value_fn: Callable[[MieleLanData], Any] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -380,6 +399,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             native_unit_of_measurement=UnitOfTemperature.CELSIUS,
             state_class=SensorStateClass.MEASUREMENT,
             value_fn=lambda s: _temp_or_none(s.get("Temperature"), 0),
+            data_value_fn=lambda d: _oven_cavity_temperature(d),
         ),
     ),
     MieleLanSensorDef(
@@ -1169,6 +1189,8 @@ class MieleLanSensor(MieleLanEntity, SensorEntity):
         if not self.coordinator.data:
             return None
         try:
+            if self.entity_description.data_value_fn is not None:
+                return self.entity_description.data_value_fn(self.coordinator.data)
             return self.entity_description.value_fn(self.coordinator.data.state)
         except Exception:  # noqa: BLE001
             return None

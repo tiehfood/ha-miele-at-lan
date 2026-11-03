@@ -234,3 +234,36 @@ def parse_wmv960_water_litres(hex_str: str | None) -> int | None:
     The caller must gate this device-specific layout by model.
     """
     return _wmv960_u16(hex_str, WMV960_WATER_OFFSET)
+
+
+# Observed on a H6800BMX oven (XKM3100W, firmware 02.72) heating to 30 C and
+# to 100 C, 2026-11-03. Its /State.Temperature stays at the -32768 sentinel,
+# but bytes 45-46 of the 49 byte ExtendedState carry the cavity temperature
+# as a big-endian s16 in hundredths of a degree. It followed the Miele app
+# from 27 C up to the 30 C and 100 C targets and stopped there. While the
+# oven is off the same bytes hold the s16 sentinel -32768. Keep the exact
+# length restriction until other ovens have been captured and verified.
+H6800BMX_EXTENDED_STATE_LENGTH = 49
+H6800BMX_CAVITY_TEMPERATURE_OFFSET = 45
+
+
+def parse_h6800bmx_cavity_temperature(hex_str: str | None) -> float | None:
+    """Read the H6800BMX cavity temperature in degrees Celsius.
+
+    Returns None for the -32768 sentinel. The caller must gate this
+    device-specific layout by model.
+    """
+    if not isinstance(hex_str, str):
+        return None
+    try:
+        payload = bytes.fromhex(hex_str)
+    except ValueError:
+        return None
+    if len(payload) != H6800BMX_EXTENDED_STATE_LENGTH:
+        return None
+    raw = int.from_bytes(
+        payload[H6800BMX_CAVITY_TEMPERATURE_OFFSET:H6800BMX_CAVITY_TEMPERATURE_OFFSET + 2],
+        "big",
+        signed=True,
+    )
+    return None if raw == -32768 else raw / 100
