@@ -1196,6 +1196,7 @@ TumbleDryerProgramId: dict[int, str] = {
     22: 'basket_program',
     23: 'cottons_hygiene',
     24: 'smoothing',
+    25: 'cottons',
     30: 'minimum_iron',
     31: 'bed_linen',
     40: 'woollens_handcare',
