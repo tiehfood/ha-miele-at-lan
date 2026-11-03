@@ -2148,6 +2148,9 @@
       "running": {
         "name": "Läuft"
       },
+      "smart_grid": {
+        "name": "Smart Grid"
+      },
       "mobile_start": {
         "name": "Mobiler Start"
       },
