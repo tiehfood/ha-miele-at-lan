@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -637,7 +638,8 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
     # on, the firmware keeps the finished cycle's totals until the next
     # programme is selected, which is what a total_increasing sensor needs (a
     # drop to a smaller value on the next cycle is read as a reset). Once the
-    # machine is switched off the blob is empty and the sensors go unknown.
+    # machine is switched off the blob is empty, MieleLanConsumptionSensor
+    # then keeps the last total so the Energy dashboard sees no unknown state.
     MieleLanSensorDef(
         types=(MieleAppliance.WASHING_MACHINE, MieleAppliance.DISHWASHER),
         description=MieleLanSensorDescription(
@@ -1237,6 +1239,8 @@ async def async_setup_entry(
                 entities.append(MieleLanProgramSensor(coord, d.description))
             elif key in ("program_id_raw", "program_phase_raw"):
                 entities.append(MieleLanProgramRawSensor(coord, d.description))
+            elif key in ("energy_consumption", "water_consumption"):
+                entities.append(MieleLanConsumptionSensor(coord, d.description))
             else:
                 entities.append(MieleLanSensor(coord, d.description))
         for d in IDENT_SENSORS:
@@ -1323,6 +1327,37 @@ class MieleLanSensor(MieleLanEntity, SensorEntity):
             return self.entity_description.value_fn(self.coordinator.data.state)
         except Exception:  # noqa: BLE001
             return None
+
+
+class MieleLanConsumptionSensor(MieleLanSensor, RestoreSensor):
+    """Cycle energy or water total that outlives the appliance being switched off.
+
+    An appliance that is switched off reports an empty ExtendedState, which
+    would turn the sensor unknown. The Energy dashboard reports an error for
+    an unknown entity, and these appliances are off most of the day. The
+    sensor therefore keeps the last total it read, also across a restart. A
+    drop to a smaller value on the next cycle is read as a reset by the
+    total_increasing state class.
+    """
+
+    def __init__(
+        self, coordinator: MieleLanCoordinator, description: MieleLanSensorDescription
+    ) -> None:
+        super().__init__(coordinator, description)
+        self._last_value: float | None = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_sensor_data()
+        if last is not None and isinstance(last.native_value, (int, float)):
+            self._last_value = last.native_value
+
+    @property
+    def native_value(self) -> Any:
+        value = super().native_value
+        if value is not None:
+            self._last_value = value
+        return self._last_value
 
 
 class MieleLanProgramSensor(MieleLanEntity, SensorEntity):
