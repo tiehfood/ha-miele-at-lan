@@ -34,6 +34,8 @@ from . import enums
 from .extended_state import (
     EXTRACTOR_SPEED_LABELS,
     hob_zone_count,
+    parse_g6992_energy_kwh,
+    parse_g6992_water_litres,
     parse_h6800bmx_cavity_temperature,
     parse_hob_extended_state,
     parse_kmda7876_extractor_speed,
@@ -261,6 +263,32 @@ def _oven_cavity_temperature(data: MieleLanData) -> int | float | None:
     if model != "H6800BMX":
         return None
     return parse_h6800bmx_cavity_temperature(data.state.get("ExtendedState"))
+
+
+def _model(data: MieleLanData) -> str:
+    return "".join(str(data.ident.get("tech_type") or "").upper().split())
+
+
+def _energy_consumption(data: MieleLanData) -> float | None:
+    """Cycle energy in kWh from the model's ExtendedState layout."""
+    extended = data.state.get("ExtendedState")
+    model = _model(data)
+    if model == "WMV960":
+        return parse_wmv960_energy_kwh(extended)
+    if model == "G6992":
+        return parse_g6992_energy_kwh(extended)
+    return None
+
+
+def _water_consumption(data: MieleLanData) -> float | None:
+    """Cycle water in litres from the model's ExtendedState layout."""
+    extended = data.state.get("ExtendedState")
+    model = _model(data)
+    if model == "WMV960":
+        return parse_wmv960_water_litres(extended)
+    if model == "G6992":
+        return parse_g6992_water_litres(extended)
+    return None
 
 
 def _utc_iso_now_plus(minutes: int | None) -> str | None:
@@ -564,15 +592,16 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             value_fn=_gated(lambda s: s.get("SpinningSpeed")),
         ),
     ),
-    # Cycle energy and water consumption from the washer's ExtendedState.
-    # Model-gated (see washer_consumption_supported): the layout has only been
-    # verified on a WMV960. Not status-gated on purpose: while the machine is
+    # Cycle energy and water consumption from the ExtendedState of a washer or
+    # a dishwasher. Model-gated (see washer_consumption_supported and
+    # dishwasher_consumption_supported): the layouts have only been verified
+    # on a WMV960 and a G6992. Not status-gated on purpose: while the machine is
     # on, the firmware keeps the finished cycle's totals until the next
     # programme is selected, which is what a total_increasing sensor needs (a
     # drop to a smaller value on the next cycle is read as a reset). Once the
     # machine is switched off the blob is empty and the sensors go unknown.
     MieleLanSensorDef(
-        types=(MieleAppliance.WASHING_MACHINE,),
+        types=(MieleAppliance.WASHING_MACHINE, MieleAppliance.DISHWASHER),
         description=MieleLanSensorDescription(
             key="energy_consumption",
             translation_key="energy_consumption",
@@ -581,11 +610,14 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             state_class=SensorStateClass.TOTAL_INCREASING,
             required_state_key="ExtendedState",
             value_fn=lambda s: parse_wmv960_energy_kwh(s.get("ExtendedState")),
+            data_value_fn=_energy_consumption,
         ),
-        supported_fn=lambda coord: coord.washer_consumption_supported,
+        supported_fn=lambda coord: (
+            coord.washer_consumption_supported or coord.dishwasher_consumption_supported
+        ),
     ),
     MieleLanSensorDef(
-        types=(MieleAppliance.WASHING_MACHINE,),
+        types=(MieleAppliance.WASHING_MACHINE, MieleAppliance.DISHWASHER),
         description=MieleLanSensorDescription(
             key="water_consumption",
             translation_key="water_consumption",
@@ -594,8 +626,11 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             state_class=SensorStateClass.TOTAL_INCREASING,
             required_state_key="ExtendedState",
             value_fn=lambda s: parse_wmv960_water_litres(s.get("ExtendedState")),
+            data_value_fn=_water_consumption,
         ),
-        supported_fn=lambda coord: coord.washer_consumption_supported,
+        supported_fn=lambda coord: (
+            coord.washer_consumption_supported or coord.dishwasher_consumption_supported
+        ),
     ),
     # --- Raw (diagnostic) siblings of gated cycle-family sensors -------------
     # These expose the firmware's last-cached value with no status gating —

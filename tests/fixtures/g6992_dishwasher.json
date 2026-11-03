@@ -1,0 +1,44 @@
+[
+  {
+    "label": "Quick PowerWash start, counters at zero",
+    "ExtendedState": "000702012D00000000000000000000000000000B06400002",
+    "energy_kwh": 0.0,
+    "water_litres": 0.0
+  },
+  {
+    "label": "pre-wash, 5.3 l and below 0.1 kWh",
+    "ExtendedState": "000702012D00000000000000000000000000350B06400002",
+    "energy_kwh": 0.0,
+    "water_litres": 5.3
+  },
+  {
+    "label": "Quick PowerWash, 10.7 l and below 0.1 kWh",
+    "ExtendedState": "000702012D000000000000000000000000006B0B06400002",
+    "energy_kwh": 0.0,
+    "water_litres": 10.7
+  },
+  {
+    "label": "Automatic, 3.7 l and below 0.1 kWh",
+    "ExtendedState": "000702030F00000000000000000000000000250B06400002",
+    "energy_kwh": 0.0,
+    "water_litres": 3.7
+  },
+  {
+    "label": "Automatic, 0.4 kWh and 3.8 l",
+    "ExtendedState": "000702030F00000000000000000000000400260B06410002",
+    "energy_kwh": 0.4,
+    "water_litres": 3.8
+  },
+  {
+    "label": "Automatic, 0.5 kWh and 3.8 l",
+    "ExtendedState": "000702030F00000000000000000000000500260B06410002",
+    "energy_kwh": 0.5,
+    "water_litres": 3.8
+  },
+  {
+    "label": "programmed, before the first cycle (not compared with the app)",
+    "ExtendedState": "000702030F00000000000000000000000D00620B06400002",
+    "energy_kwh": 1.3,
+    "water_litres": 9.8
+  }
+]

@@ -267,3 +267,49 @@ def parse_h6800bmx_cavity_temperature(hex_str: str | None) -> float | None:
         signed=True,
     )
     return None if raw == -32768 else raw / 100
+
+
+# Observed on a G6992 dishwasher (EK039W, firmware 02.72, protocol 2) through
+# a Quick PowerWash and an Automatic cycle, 2026-11-03. The blob is 24 bytes
+# while the machine is on and empty once it is switched off. Energy is a u8
+# in tenths of a kWh at byte 16 and water is a big-endian u16 in tenths of a
+# litre at bytes 17-18. Both were compared with the Miele app during the
+# cycles (water 3.7, 5.3 and 10.7 l, energy 0.4 and 0.5 kWh). They reset to
+# zero when a new programme starts and keep the finished cycle's totals
+# until then. Keep the exact length restriction until other dishwashers have
+# been captured and verified.
+G6992_EXTENDED_STATE_LENGTH = 24
+G6992_ENERGY_OFFSET = 16
+G6992_WATER_OFFSET = 17
+
+
+def _g6992_payload(hex_str: str | None) -> bytes | None:
+    if not isinstance(hex_str, str):
+        return None
+    try:
+        payload = bytes.fromhex(hex_str)
+    except ValueError:
+        return None
+    return payload if len(payload) == G6992_EXTENDED_STATE_LENGTH else None
+
+
+def parse_g6992_energy_kwh(hex_str: str | None) -> float | None:
+    """Read the G6992 energy counter (byte 16, tenths of a kWh).
+
+    The caller must gate this device-specific layout by model.
+    """
+    payload = _g6992_payload(hex_str)
+    return None if payload is None else payload[G6992_ENERGY_OFFSET] / 10
+
+
+def parse_g6992_water_litres(hex_str: str | None) -> float | None:
+    """Read the G6992 water counter (bytes 17-18, tenths of a litre).
+
+    The caller must gate this device-specific layout by model.
+    """
+    payload = _g6992_payload(hex_str)
+    if payload is None:
+        return None
+    return int.from_bytes(
+        payload[G6992_WATER_OFFSET:G6992_WATER_OFFSET + 2], "big"
+    ) / 10
