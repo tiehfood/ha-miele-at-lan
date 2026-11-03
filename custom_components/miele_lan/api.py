@@ -61,6 +61,7 @@ from .const import (
     LAUNDRY_FAMILY,
     OPCODE_LIGHT_OFF,
     OPCODE_LIGHT_ON,
+    OPCODE_STOP,
     OPCODE_SWITCH_OFF,
     OPCODE_SWITCH_ON,
     PROCESS_ACTION_PAUSE,
@@ -434,6 +435,43 @@ def _install_patches() -> None:
     _client_mod.MieleClient._request_bytes = _patched_request_bytes  # type: ignore[assignment]
 
 
+class DopWritesBlockedError(HomeAssistantError):
+    """The appliance answered HTTP 404 to a DOP2 write.
+
+    Raised so callers can tell "this firmware has no DOP2 write path" apart
+    from other refusals and try the /State fallback where one exists.
+    """
+
+
+def _raise_on_failure(raw: bytes) -> None:
+    """Raise when a /State write answered HTTP 200 with a `Failure` entry.
+
+    The appliance acknowledges a field it does not have as
+    ``[{"Failure":{"DeviceAction":null}}]`` with a 200 status, so the status
+    alone says nothing about whether the command was carried out.
+    """
+    text = raw.decode("utf-8", errors="replace").strip() if raw else ""
+    if not text:
+        return
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return
+    items = parsed if isinstance(parsed, list) else [parsed]
+    failed: list[str] = []
+    for item in items:
+        failure = item.get("Failure") if isinstance(item, dict) else None
+        if isinstance(failure, dict):
+            failed.extend(str(key) for key in failure)
+        elif failure:
+            failed.append(str(failure))
+    if failed:
+        raise HomeAssistantError(
+            "The appliance does not support this action "
+            f"({', '.join(failed)} was rejected)."
+        )
+
+
 class MieleLanClient:
     """High-level local client for one provisioned Miele appliance.
 
@@ -526,6 +564,7 @@ class MieleLanClient:
             raise HomeAssistantError("Could not connect to the appliance.") from exc
         if status == 204 or not raw:
             return {}
+        _raise_on_failure(raw)
         text = raw.decode("utf-8", errors="replace").strip()
         try:
             parsed = json.loads(text)
@@ -578,7 +617,7 @@ class MieleLanClient:
             if reason:
                 raise HomeAssistantError(reason)
         try:
-            await self._client._request_bytes(
+            _, raw = await self._client._request_bytes(
                 "PUT",
                 f"/Devices/{self._route}/State",
                 body={"ProcessAction": action},
@@ -594,6 +633,7 @@ class MieleLanClient:
             ) from exc
         except NetworkConnectionError as exc:
             raise HomeAssistantError("Could not connect to the appliance.") from exc
+        _raise_on_failure(raw)
 
     async def start_process(
         self,
@@ -664,7 +704,7 @@ class MieleLanClient:
         except ResponseError as exc:
             status = exc.status_code
             if status == 404:
-                raise HomeAssistantError(
+                raise DopWritesBlockedError(
                     "This appliance's firmware does not accept remote commands "
                     "over the local API (DOP2 writes are blocked on this hardware/firmware)."
                 ) from exc
@@ -690,6 +730,20 @@ class MieleLanClient:
             raise HomeAssistantError("Could not connect to the appliance.") from exc
 
     # --- light / power convenience ------------------------------------------
+
+    async def stop_program(self) -> None:
+        """Stop the running programme of an oven.
+
+        DOP2 STOP first, which is what ovens with a DOP2 write path accept.
+        An oven whose firmware answers HTTP 404 to every DOP2 write (an
+        H6800BMX did) falls back to `PUT /State {"ProcessAction": 2}`, which
+        it carried out: Status went from 5 (in use) to 2 and the programme
+        ended. Other refusals, such as 403 or 500, are reported as they are.
+        """
+        try:
+            await self.write_user_request(OPCODE_STOP)
+        except DopWritesBlockedError:
+            await self.send_process_action(PROCESS_ACTION_STOP)
 
     async def light_on(self) -> None:
         """Turn interior light on via the clean /State JSON API (no DOP2 needed)."""
