@@ -30,7 +30,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     DISHWASHER_FAMILY,
     DOMAIN,
-    OPCODE_STOP,
     OVEN_FAMILY,
     PROCESS_ACTION_PAUSE,
     PROCESS_ACTION_START,
@@ -78,7 +77,7 @@ BUTTONS: tuple[MieleLanButtonDef, ...] = (
         description=MieleLanButtonDescription(
             key="stop_program",
             translation_key="stop_program",
-            press_fn=lambda coord: coord.client.write_user_request(OPCODE_STOP),
+            press_fn=lambda coord: coord.client.stop_program(),
         ),
     ),
     MieleLanButtonDef(
