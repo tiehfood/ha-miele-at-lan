@@ -195,8 +195,9 @@ def parse_kmda7876_extractor_speed(hex_str: str | None) -> str | None:
 
 
 # Observed on a WMV960 WPS washing machine (XKM3100W, firmware 02.72) during
-# a 60 C cotton cycle, 2026-11-03. The blob is 67 bytes while a programme is
-# selected or running and only 16 bytes when idle. Both counters are
+# a 60 C cotton cycle, 2026-11-03. The blob is 67 bytes whenever the machine
+# is powered on (both counters read zero until a programme runs) and empty
+# once it is switched off. Both counters are
 # big-endian u16 and were checked against the Miele app every few seconds:
 # water rose 23 -> 68 litres and energy went 14 -> 15 (1.4 -> 1.5 kWh) and
 # both kept their final values after the cycle ended. Keep the exact length
