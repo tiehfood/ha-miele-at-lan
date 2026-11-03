@@ -1101,6 +1101,12 @@
       "spin_speed": {
         "name": "Schleuderdrehzahl"
       },
+      "energy_consumption": {
+        "name": "Energieverbrauch"
+      },
+      "water_consumption": {
+        "name": "Wasserverbrauch"
+      },
       "plate_1_step": {
         "name": "Kochzone 1 Leistung",
         "state": {
