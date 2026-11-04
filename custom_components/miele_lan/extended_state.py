@@ -243,16 +243,18 @@ def parse_wmv960_water_litres(hex_str: str | None) -> int | None:
 # from 27 C up to the 30 C and 100 C targets and stopped there. While the
 # oven is off the same bytes hold the s16 sentinel -32768. Keep the exact
 # length restriction until other ovens have been captured and verified.
+#
+# The food probe follows the cavity temperature in the next two bytes (47-48),
+# same encoding. It matched the oven display at 21, 22, 23, 24, 26 and 27 C
+# while it was moving up on the Auto roasting programme, and it holds the
+# -32768 sentinel while no probe is plugged in. The probe target is not in the
+# blob. /State.Temperature[1] and TargetTemperature[1] stay empty.
 H6800BMX_EXTENDED_STATE_LENGTH = 49
 H6800BMX_CAVITY_TEMPERATURE_OFFSET = 45
+H6800BMX_CORE_TEMPERATURE_OFFSET = 47
 
 
-def parse_h6800bmx_cavity_temperature(hex_str: str | None) -> float | None:
-    """Read the H6800BMX cavity temperature in degrees Celsius.
-
-    Returns None for the -32768 sentinel. The caller must gate this
-    device-specific layout by model.
-    """
+def _parse_h6800bmx_temperature(hex_str: str | None, offset: int) -> float | None:
     if not isinstance(hex_str, str):
         return None
     try:
@@ -261,12 +263,26 @@ def parse_h6800bmx_cavity_temperature(hex_str: str | None) -> float | None:
         return None
     if len(payload) != H6800BMX_EXTENDED_STATE_LENGTH:
         return None
-    raw = int.from_bytes(
-        payload[H6800BMX_CAVITY_TEMPERATURE_OFFSET:H6800BMX_CAVITY_TEMPERATURE_OFFSET + 2],
-        "big",
-        signed=True,
-    )
+    raw = int.from_bytes(payload[offset:offset + 2], "big", signed=True)
     return None if raw == -32768 else raw / 100
+
+
+def parse_h6800bmx_cavity_temperature(hex_str: str | None) -> float | None:
+    """Read the H6800BMX cavity temperature in degrees Celsius.
+
+    Returns None for the -32768 sentinel. The caller must gate this
+    device-specific layout by model.
+    """
+    return _parse_h6800bmx_temperature(hex_str, H6800BMX_CAVITY_TEMPERATURE_OFFSET)
+
+
+def parse_h6800bmx_core_temperature(hex_str: str | None) -> float | None:
+    """Read the H6800BMX food probe temperature in degrees Celsius.
+
+    Returns None while no probe is plugged in (the -32768 sentinel). The
+    caller must gate this device-specific layout by model.
+    """
+    return _parse_h6800bmx_temperature(hex_str, H6800BMX_CORE_TEMPERATURE_OFFSET)
 
 
 # Observed on a G6992 dishwasher (EK039W, firmware 02.72, protocol 2) through
