@@ -117,13 +117,16 @@ _PROGRAM_PHASE_BY_TYPE: dict[MieleAppliance, dict[int, str]] = {
 def _lookup_for_type(table_map: dict[MieleAppliance, dict[int, str]],
                      state: dict[str, Any],
                      field: str,
-                     device_type: MieleAppliance) -> str | None:
+                     device_type: MieleAppliance,
+                     overrides: dict[int, str] | None = None) -> str | None:
     table = table_map.get(device_type)
     if not table:
         return None
     v = state.get(field)
     if not isinstance(v, int):
         return None
+    if overrides and v in overrides:
+        return overrides[v]
     return table.get(v) or str(v)
 
 ALL_TYPES: tuple[MieleAppliance, ...] = tuple(
@@ -269,6 +272,12 @@ def _oven_cavity_temperature(data: MieleLanData) -> int | float | None:
 
 def _model(data: MieleLanData) -> str:
     return "".join(str(data.ident.get("tech_type") or "").upper().split())
+
+
+# Model specific ProgramID names that take precedence over the shared tables.
+_MODEL_PROGRAM_ID: dict[str, dict[int, str]] = {
+    "H6800BMX": enums.H6800BMXProgramId,
+}
 
 
 def _energy_consumption(data: MieleLanData) -> float | None:
@@ -1309,7 +1318,10 @@ class MieleLanProgramSensor(MieleLanEntity, SensorEntity):
         dt = self.coordinator.device_type
         key = self.entity_description.key
         if key == "program_id":
-            return _lookup_for_type(_PROGRAM_ID_BY_TYPE, state, "ProgramID", dt)
+            return _lookup_for_type(
+                _PROGRAM_ID_BY_TYPE, state, "ProgramID", dt,
+                _MODEL_PROGRAM_ID.get(_model(self.coordinator.data)),
+            )
         if key == "program_phase":
             phase = state.get("ProgramPhase")
             if phase == 0:
@@ -1343,7 +1355,10 @@ class MieleLanProgramRawSensor(MieleLanEntity, SensorEntity):
         dt = self.coordinator.device_type
         key = self.entity_description.key
         if key == "program_id_raw":
-            return _lookup_for_type(_PROGRAM_ID_BY_TYPE, state, "ProgramID", dt)
+            return _lookup_for_type(
+                _PROGRAM_ID_BY_TYPE, state, "ProgramID", dt,
+                _MODEL_PROGRAM_ID.get(_model(self.coordinator.data)),
+            )
         if key == "program_phase_raw":
             return _lookup_for_type(_PROGRAM_PHASE_BY_TYPE, state, "ProgramPhase", dt)
         return None

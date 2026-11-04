@@ -471,6 +471,18 @@ ProgramPhaseMicrowave: dict[int, str] = {
     65535: 'not_running',
 }
 
+# The H6800BMX reports its own ProgramID numbers for the manual heating
+# functions. They are absent from the shared table above and clash with it
+# (8 is steam cooking on steam ovens), so they apply to this model only.
+H6800BMXProgramId: dict[int, str] = {
+    2: 'auto_roast',
+    3: 'grill',
+    4: 'fan_plus',
+    5: 'intensive_bake',
+    8: 'fan_grill',
+    15: 'browning',
+}
+
 ProgramPhaseMicrowaveOvenCombo: dict[int, str] = {
     0: 'not_running',
     3329: 'heating_up_phase',
@@ -495,6 +507,11 @@ ProgramPhaseOven: dict[int, str] = {
     3081: 'roasting',
     3084: 'energy_save',
     3099: 'pre_heating',
+    3328: 'cooling_down',
+    3329: 'heating_up_phase',
+    3330: 'process_running',
+    3334: 'process_finished',
+    3336: 'roasting',
     65535: 'not_running',
 }
 
