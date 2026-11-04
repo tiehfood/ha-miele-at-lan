@@ -28,6 +28,18 @@ from .entity import MieleLanEntity
 _LOGGER = logging.getLogger(__name__)
 
 
+# Models that report /State.Light = 0 in every state and answer a Light write
+# with HTTP 403. A H6800BMX kept 0 with the lamp on, the door open and the oven
+# running, its cloud state has no `light` field and the cloud `light` action
+# list is empty. A light entity for these would never show a state.
+_NO_LIGHT_STATE_MODELS = frozenset({"H6800BMX"})
+
+
+def _light_is_dead(data: Any) -> bool:
+    model = "".join(str(data.ident.get("tech_type") or "").upper().split())
+    return model in _NO_LIGHT_STATE_MODELS and data.state.get("Light") == 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -38,7 +50,8 @@ async def async_setup_entry(
     entities: list[Any] = []
     for coord in coordinators.values():
         if coord.device_type in LIGHTABLE_FAMILY and "Light" in coord.data.state:
-            entities.append(MieleLanLight(coord))
+            if not _light_is_dead(coord.data):
+                entities.append(MieleLanLight(coord))
     async_add_entities(entities)
 
 
