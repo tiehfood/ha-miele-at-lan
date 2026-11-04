@@ -1,0 +1,14 @@
+[
+  {
+    "label": "oven off, no probe",
+    "ExtendedState": "000D01000000000000000000000000000000000000000000000000000000000000FFFFFFFFFFFFFFFF0000000080008000",
+    "cavity": null,
+    "probe": null
+  },
+  {
+    "label": "Auto roasting, probe 26 C on the display",
+    "ExtendedState": "000D01000000000000000000000000000000010200000000010000000000000000FFFFFFFFFFFFFFFF00006DC546F90A28",
+    "cavity": 181.69,
+    "probe": 26.0
+  }
+]
