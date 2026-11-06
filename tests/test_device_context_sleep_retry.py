@@ -16,6 +16,7 @@ import importlib.util
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -67,6 +68,7 @@ def _make_coordinator(statuses: list[int], device_type: MieleAppliance) -> Any:
     coord._device_context_unsupported = False
     coord._device_context_last_fetch = float("-inf")  # fresh runners: monotonic() starts ~0
     coord._device_context_miss_cycles = 0
+    coord._device_context_answered = False
     return coord
 
 
@@ -203,6 +205,57 @@ def test_200_resets_the_miss_counter() -> None:
     _reset_throttle(coord)
     asyncio.run(_run(coord))
     assert coord._device_context_unsupported is True
+
+
+def test_laundry_sleep_after_first_answer_does_not_wake() -> None:
+    """An idle dryer must stay asleep once the leaf is known to work."""
+    coord = _make_coordinator([200], MieleAppliance.TUMBLE_DRYER)
+    asyncio.run(_run(coord))
+    coord._data.device_context = {"wash2dry_state": "activatable"}
+    for _ in range(4):
+        coord.client.set_statuses([500])
+        _reset_throttle(coord)
+        asyncio.run(_run(coord))
+    coord.client.wake.assert_not_awaited()
+    assert coord._device_context_unsupported is False
+    assert coord._data.device_context == {"wash2dry_state": "activatable"}
+
+
+def test_laundry_sleeping_at_startup_is_woken_once_to_discover_the_leaf() -> None:
+    coord = _make_coordinator([500, 200], MieleAppliance.TUMBLE_DRYER)
+    asyncio.run(_run(coord))
+    coord.client.wake.assert_awaited_once()
+    assert coord._device_context_answered is True
+
+
+def test_dishwasher_is_still_woken_after_first_answer() -> None:
+    """Its door state depends on this read (#59)."""
+    coord = _make_coordinator([200], MieleAppliance.DISHWASHER)
+    asyncio.run(_run(coord))
+    coord.client.set_statuses([500, 200])
+    _reset_throttle(coord)
+    asyncio.run(_run(coord))
+    coord.client.wake.assert_awaited_once()
+
+
+def test_laundry_sleep_ends_a_streak_of_fetch_failures() -> None:
+    """Isolated timeouts weeks apart must not add up to a latch."""
+    coord = _make_coordinator([200], MieleAppliance.TUMBLE_DRYER)
+    asyncio.run(_run(coord))
+    good_raw = coord.client.raw
+    for _ in range(3):
+        coord.client.raw = SimpleNamespace(
+            _request_bytes=AsyncMock(side_effect=TimeoutError)
+        )
+        _reset_throttle(coord)
+        asyncio.run(_run(coord))
+        assert coord._device_context_miss_cycles == 1
+        coord.client.raw = good_raw
+        coord.client.set_statuses([500])
+        _reset_throttle(coord)
+        asyncio.run(_run(coord))
+        assert coord._device_context_miss_cycles == 0
+    assert coord._device_context_unsupported is False
 
 
 def test_wake_failure_counts_as_a_miss() -> None:

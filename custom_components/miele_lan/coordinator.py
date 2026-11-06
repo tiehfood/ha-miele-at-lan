@@ -439,11 +439,16 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
           does not *mean* asleep: other EK037-class units (issue #16,
           FW 04.05) answer 500 {"Error": 20660} or 28701 on unrelated
           leaves while awake, every time — and time out on 2/1585.
-          So the 500-path is transient (one wake-and-retry round per
-          poll cycle) but *bounded*: if 3 consecutive poll cycles end
+          So the 500-path is transient (at most one wake-and-retry round
+          per poll cycle) but *bounded*: if 3 consecutive poll cycles end
           without a 200 (500 after wake, or a fetch failure/timeout),
           the leaf is latched unsupported just like a 403/404. Any 200
           resets the counter.
+        - A laundry machine is woken only until the leaf first answers.
+          After that its 500s are left alone and the cached values kept:
+          nothing here needs a fresh read while it idles, and each wake
+          turns its display and drum light on. Dishwashers keep the
+          wake, because their door state depends on this read (#59).
         - A latch (403/404, or 3 misses) also clears the cached
           device_context so device-context consumers see empty data
           (entities go `unknown`) instead of frozen stale levels.
@@ -491,6 +496,13 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 allowed_status=(200, 403, 404, 500),
             )
             if st == 500:
+                if self._device_context_answered and self.device_type in LAUNDRY_FAMILY:
+                    self._device_context_miss_cycles = 0
+                    _LOGGER.debug(
+                        "[%s] DOP2 2/1585 got 500 (asleep), keeping cached context",
+                        self.fab,
+                    )
+                    return
                 # Sleeping XKM — wake it, give it the same ~3s the app
                 # allows, and retry once before the next poll cycle.
                 try:
