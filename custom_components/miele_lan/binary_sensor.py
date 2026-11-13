@@ -12,7 +12,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -281,15 +281,43 @@ async def async_setup_entry(
                 if int(key.rsplit("_", 1)[1]) not in door_zones:
                     continue
             entities.append(MieleLanBinarySensor(coord, d.description))
-        for d in DEVICE_CONTEXT_BINARY_SENSORS:
-            if dt not in d.types:
-                continue
-            ci = d.description.container_index
-            containers = coord.data.device_context.get("dos_containers") if coord.data else None
-            if not containers or len(containers) <= ci:
-                continue
-            entities.append(MieleLanDeviceContextBinarySensor(coord, d.description))
+        created: set[str] = set()
+        entities.extend(_new_device_context_entities(coord, created))
+        entry.async_on_unload(
+            coord.async_add_listener(_late_entity_adder(coord, created, async_add_entities))
+        )
     async_add_entities(entities)
+
+
+def _late_entity_adder(
+    coord: MieleLanCoordinator, created: set[str], async_add_entities: AddEntitiesCallback
+) -> Callable[[], None]:
+    @callback
+    def _add() -> None:
+        if new := _new_device_context_entities(coord, created):
+            async_add_entities(new)
+
+    return _add
+
+
+def _new_device_context_entities(
+    coord: MieleLanCoordinator, created: set[str]
+) -> list[BinarySensorEntity]:
+    """2/1585 entities whose data is there now and that don't exist yet.
+
+    Washers and dryers are not woken for 2/1585 (#65), so one asleep at
+    platform setup only answers it later.
+    """
+    entities: list[BinarySensorEntity] = []
+    containers = coord.data.device_context.get("dos_containers") if coord.data else None
+    for d in DEVICE_CONTEXT_BINARY_SENSORS:
+        if coord.device_type not in d.types or d.description.key in created:
+            continue
+        if not containers or len(containers) <= d.description.container_index:
+            continue
+        created.add(d.description.key)
+        entities.append(MieleLanDeviceContextBinarySensor(coord, d.description))
+    return entities
 
 
 class MieleLanBinarySensor(MieleLanEntity, BinarySensorEntity):

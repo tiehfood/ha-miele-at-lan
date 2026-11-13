@@ -28,7 +28,7 @@ from homeassistant.const import (
     UnitOfTime,
     UnitOfVolume,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import enums
@@ -1170,33 +1170,63 @@ async def async_setup_entry(
         for d in WLAN_SENSORS:
             if dt in d.types:
                 entities.append(MieleLanWlanSensor(coord, d.description))
-        for d in DOP2_SENSORS:
-            if dt not in d.types:
-                continue
-            rdk = d.description.required_dop2_key
-            # `hours_of_operation_supported` tracks one specific DOP2 leaf
-            # (2/119) and says nothing about the other entries here — the hood
-            # filter grades don't even come from DOP2 (see coordinator.py) —
-            # so only the sensor fed by that leaf is gated on it.
-            if rdk == "hours_of_operation" and not coord.hours_of_operation_supported:
-                continue
-            if rdk is not None and rdk not in coord.data.dop2:
-                continue
-            entities.append(MieleLanDop2Sensor(coord, d.description))
-        for d in DEVICE_CONTEXT_SENSORS:
-            if dt not in d.types:
-                continue
-            if not coord.data.device_context:
-                continue
-            ci = d.description.container_index
-            if ci is not None:
-                containers = coord.data.device_context.get("dos_containers")
-                if not containers or len(containers) <= ci:
-                    continue
-            entities.append(MieleLanDeviceContextSensor(coord, d.description))
+        created: set[str] = set()
+        entities.extend(_new_late_entities(coord, created))
+        entry.async_on_unload(
+            coord.async_add_listener(_late_entity_adder(coord, created, async_add_entities))
+        )
         # Diagnostic push-mode sensor — applies to every appliance.
         entities.append(MieleLanPushStateSensor(coord))
     async_add_entities(entities)
+
+
+def _late_entity_adder(
+    coord: MieleLanCoordinator, created: set[str], async_add_entities: AddEntitiesCallback
+) -> Callable[[], None]:
+    @callback
+    def _add() -> None:
+        if new := _new_late_entities(coord, created):
+            async_add_entities(new)
+
+    return _add
+
+
+def _new_late_entities(coord: MieleLanCoordinator, created: set[str]) -> list[SensorEntity]:
+    """DOP2 and 2/1585 entities whose data is there now and that don't exist yet.
+
+    Those leaves are read on a slow cadence and only while the appliance is
+    awake (washers and dryers are not woken for 2/1585, #65), so their data
+    can first show up long after platform setup.
+    """
+    dt = coord.device_type
+    entities: list[SensorEntity] = []
+    for d in DOP2_SENSORS:
+        if dt not in d.types or d.description.key in created:
+            continue
+        rdk = d.description.required_dop2_key
+        # `hours_of_operation_supported` tracks one specific DOP2 leaf
+        # (2/119) and says nothing about the other entries here — the hood
+        # filter grades don't even come from DOP2 (see coordinator.py) —
+        # so only the sensor fed by that leaf is gated on it.
+        if rdk == "hours_of_operation" and not coord.hours_of_operation_supported:
+            continue
+        if rdk is not None and rdk not in coord.data.dop2:
+            continue
+        created.add(d.description.key)
+        entities.append(MieleLanDop2Sensor(coord, d.description))
+    for d in DEVICE_CONTEXT_SENSORS:
+        if dt not in d.types or d.description.key in created:
+            continue
+        if not coord.data.device_context:
+            continue
+        ci = d.description.container_index
+        if ci is not None:
+            containers = coord.data.device_context.get("dos_containers")
+            if not containers or len(containers) <= ci:
+                continue
+        created.add(d.description.key)
+        entities.append(MieleLanDeviceContextSensor(coord, d.description))
+    return entities
 
 
 # --- entity classes ----------------------------------------------------------

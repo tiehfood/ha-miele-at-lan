@@ -69,7 +69,7 @@ def make_coordinator(tmp_path, monkeypatch):
 async def test_real_entity_selection(make_coordinator, model, device_type, expected, platform, key):
     hass, coord = make_coordinator(model, device_type)
     entities = []
-    await platform.async_setup_entry(hass, SimpleNamespace(entry_id="test"), entities.extend)
+    await platform.async_setup_entry(hass, SimpleNamespace(entry_id="test", async_on_unload=lambda unsub: None), entities.extend)
     extractors = [e for e in entities if e.unique_id == f"test-hob_{key}"]
     assert len(extractors) == int(expected)
     if expected:
