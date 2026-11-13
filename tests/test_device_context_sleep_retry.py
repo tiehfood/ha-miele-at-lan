@@ -25,7 +25,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import custom_components.miele_lan.coordinator as coordinator_mod  # noqa: E402
+from custom_components.miele_lan.api import ActionRejectedError  # noqa: E402
 from custom_components.miele_lan.const import MieleAppliance  # noqa: E402
+from homeassistant.exceptions import HomeAssistantError  # noqa: E402
 from custom_components.miele_lan.coordinator import DEVICE_CONTEXT_MAX_MISS_CYCLES  # noqa: E402
 
 FIXTURE = Path(__file__).parent / "fixtures" / "g7655_dop2_1585.hex"
@@ -280,3 +282,23 @@ def test_laundry_sleep_ends_a_streak_of_fetch_failures() -> None:
         asyncio.run(_run(coord))
         assert coord._device_context_miss_cycles == 0
     assert coord._device_context_unsupported is False
+
+
+def test_wake_answered_with_failure_still_retries() -> None:
+    """A wake the appliance answers with a `Failure` entry is ignored, like the app does."""
+    coord = _make_coordinator([500], MieleAppliance.DISHWASHER)
+    coord.client.set_statuses([500, 200])
+    coord.client.wake = AsyncMock(side_effect=ActionRejectedError("DeviceAction was rejected"))
+    asyncio.run(_run(coord))
+    assert coord.client.raw.calls == 2
+    assert coord._data.device_context.get("salt_percent") == 77
+    assert coord._device_context_miss_cycles == 0
+
+
+def test_wake_connection_error_counts_a_miss() -> None:
+    coord = _make_coordinator([500], MieleAppliance.DISHWASHER)
+    coord.client.set_statuses([500])
+    coord.client.wake = AsyncMock(side_effect=HomeAssistantError("Could not connect to the appliance."))
+    asyncio.run(_run(coord))
+    assert coord.client.raw.calls == 1
+    assert coord._device_context_miss_cycles == 1

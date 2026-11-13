@@ -12,7 +12,7 @@ import pytest
 from asyncmiele.exceptions.network import ResponseError
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.miele_lan.api import DopWritesBlockedError, MieleLanClient
+from custom_components.miele_lan.api import ActionRejectedError, DopWritesBlockedError, MieleLanClient
 from custom_components.miele_lan.const import PROCESS_ACTION_STOP
 
 FAB = "000000000000"
@@ -73,7 +73,7 @@ def test_fallback_refusal_is_reported() -> None:
 
 def test_fallback_failure_entry_is_reported() -> None:
     stub = _QueuedRawClient([ResponseError(404, "no dop2"), (200, FAILURE)])
-    with pytest.raises(HomeAssistantError) as exc_info:
+    with pytest.raises(ActionRejectedError) as exc_info:
         _run(MieleLanClient(stub, route=FAB).stop_program())
     assert "does not support this action" in str(exc_info.value)
 

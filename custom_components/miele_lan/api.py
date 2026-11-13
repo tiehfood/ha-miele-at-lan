@@ -505,6 +505,14 @@ class DopWritesBlockedError(HomeAssistantError):
     """
 
 
+class ActionRejectedError(HomeAssistantError):
+    """A /State write was acknowledged with HTTP 200 but carried a `Failure` entry.
+
+    The appliance understood the request and refused it, so this is not a
+    connection problem. Callers that only wake the appliance can carry on.
+    """
+
+
 def _raise_on_failure(raw: bytes) -> None:
     """Raise when a /State write answered HTTP 200 with a `Failure` entry.
 
@@ -528,7 +536,7 @@ def _raise_on_failure(raw: bytes) -> None:
         elif failure:
             failed.append(str(failure))
     if failed:
-        raise HomeAssistantError(
+        raise ActionRejectedError(
             "The appliance does not support this action "
             f"({', '.join(failed)} was rejected)."
         )
