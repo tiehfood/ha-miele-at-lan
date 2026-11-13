@@ -731,6 +731,8 @@ StateStatus: dict[int, str] = {
     13: 'superfreezing',
     14: 'supercooling',
     15: 'superheating',
+    144: 'default',
+    145: 'locked',
     146: 'supercooling_superfreezing',
     147: 'autocleaning',
     255: 'not_connected',

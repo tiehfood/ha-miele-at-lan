@@ -101,9 +101,11 @@
         "name": "Status",
         "state": {
           "autocleaning": "Automatic cleaning",
+          "default": "Default",
           "failure": "Failure",
           "idle": "Idle",
           "in_use": "In use",
+          "locked": "Locked",
           "not_connected": "Not connected",
           "off": "Off",
           "on": "On",
