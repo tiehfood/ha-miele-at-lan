@@ -688,7 +688,12 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         if merged:
             self._push_count += 1
             self._last_push_at = time.time()
-            self.async_set_updated_data(self._data)
+            # Not async_set_updated_data: that re-arms the refresh timer, so
+            # pushes arriving faster than the interval would starve the poll
+            # and everything only it reads (2/1585 door, device context, WLAN).
+            self.data = self._data
+            self.last_update_success = True
+            self.async_update_listeners()
 
     async def _fetch_full_ident(self) -> dict[str, Any]:
         """Read raw /Devices/{fab}/Ident and extract appliance + XKM fields."""
