@@ -459,7 +459,9 @@ async def _patched_request_bytes(
             return status, _crypto.decrypt_response(raw, sig_bytes, self.group_key)
     except asyncio.TimeoutError as exc:
         raise NetworkTimeoutError(str(exc)) from exc
-    except aiohttp.ClientConnectorError as exc:
+    except aiohttp.ClientError as exc:
+        # Dropped keep-alive, reset or truncated body: every caller maps
+        # NetworkConnectionError to a readable error and set_power falls back.
         raise NetworkConnectionError(str(exc)) from exc
 
 
