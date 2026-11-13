@@ -66,6 +66,8 @@ from .const import (
     PROCESS_ACTION_PAUSE,
     PROCESS_ACTION_START,
     PROCESS_ACTION_STOP,
+    PROGRAM_SELECT_LEAF,
+    PROGRAM_SELECT_UNIT,
     RUN_ON_TIME_MINUTES,
     STATUS_IN_USE,
     STATUS_PROGRAMMED,
@@ -75,6 +77,7 @@ from .const import (
     MieleAppliance,
     parse_minutes_field,
 )
+from .dop2 import _walk_fields
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -137,6 +140,43 @@ def build_appliance_state_payload(on: bool) -> bytes:
         value,
     )
     return body + b"\x20" * (32 - len(body))
+
+
+def build_program_select_payload(current: bytes, program_id: int) -> bytes:
+    """Build the DOP2 2/1577 write that selects `program_id`.
+
+    Read-modify-write, as the app's laundry `SelectProgramAction` does it:
+    take the appliance's own GLOBAL_PS_Select read, set attr 1 ProgId (E16)
+    and attr 3 SelectionType (E8, 0 = select), and send the whole object
+    back. Every other byte, including the nested SelectionParaDW, stays as
+    read, so no encoder for those structs is needed.
+    """
+    if not 0 <= program_id <= 0xFFFF:
+        raise ValueError(f"program id out of range: {program_id}")
+    if len(current) < 12:
+        raise ValueError("2/1577 read is shorter than a DOP2 header")
+    length, unit, leaf, _, _, count = struct.unpack_from(">HHHHHH", current)
+    if (unit, leaf) != (PROGRAM_SELECT_UNIT, PROGRAM_SELECT_LEAF):
+        raise ValueError(f"not a 2/1577 read: {unit}/{leaf}")
+    if len(current) < length + 2:
+        raise ValueError("2/1577 read is shorter than its declared length")
+    body = bytearray(current[: length + 2])
+    patched: set[int] = set()
+    off = 12
+    for _ in range(count):
+        if off + 3 > len(body):
+            raise ValueError("2/1577 read ends before its last attribute")
+        attr, dtype = struct.unpack_from(">HB", body, off)
+        if attr == 1 and dtype == 0x07:
+            struct.pack_into(">H", body, off + 3, program_id)
+            patched.add(1)
+        elif attr == 3 and dtype == 0x04:
+            body[off + 3] = 0
+            patched.add(3)
+        _, off = _walk_fields(bytes(body), off, 1)
+    if off != len(body) or patched != {1, 3}:
+        raise ValueError("2/1577 read does not have the expected layout")
+    return bytes(body)
 
 
 def _check_dishwasher_precondition(state: dict[str, Any], action: int) -> str | None:

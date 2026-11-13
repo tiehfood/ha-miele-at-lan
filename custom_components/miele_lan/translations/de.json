@@ -2280,6 +2280,20 @@
           "description": "Zweiter DOP2-Indexparameter. Lass ihn bei 0, wenn du nicht weißt, dass das Blatt indiziert ist."
         }
       }
+    },
+    "select_program": {
+      "name": "Programm auswählen (experimentell)",
+      "description": "Wählt ein Programm über das DOP2-Blatt 2/1577 aus, wie die Miele-App. Startet es nicht. Experimentell: gibt den HTTP-Status und das Blatt vorher und nachher zurück, zum Melden in GitHub-Issue #61.",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Das Miele@LAN-Gerät, auf dem das Programm ausgewählt wird."
+        },
+        "program_id": {
+          "name": "Programm-ID",
+          "description": "Die geräteeigene Programmnummer, wie in DOP2 2/1584 aufgeführt (z. B. 200 für Eco bei einem G7655)."
+        }
+      }
     }
   },
   "issues": {

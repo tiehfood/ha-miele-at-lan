@@ -2280,6 +2280,20 @@
           "description": "Second DOP2 index parameter. Leave at 0 unless you know the leaf is indexed."
         }
       }
+    },
+    "select_program": {
+      "name": "Select programme (experimental)",
+      "description": "Selects a programme by writing DOP2 leaf 2/1577, the way the Miele app does. Does not start it. Experimental: returns the HTTP status and the leaf before and after, for reporting in GitHub issue #61.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The Miele@LAN device to select the programme on."
+        },
+        "program_id": {
+          "name": "Programme ID",
+          "description": "The appliance's own programme number, as listed in DOP2 2/1584 (e.g. 200 for Eco on a G7655)."
+        }
+      }
     }
   },
   "issues": {

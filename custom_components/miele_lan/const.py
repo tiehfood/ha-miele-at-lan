@@ -86,6 +86,10 @@ STATUS_IN_USE = 5
 USER_REQUEST_UNIT = 2
 USER_REQUEST_LEAF = 1583
 
+# DOP2 GLOBAL_PS_Select leaf — programme selection (#61).
+PROGRAM_SELECT_UNIT = 2
+PROGRAM_SELECT_LEAF = 1577
+
 # Opcode → label.  Sourced from MieleDop2Structures.UserRequestOven (akappner/MieleRESTServer)
 # and confirmed working on the H7560BP oven via DOP2 writes (light, switch on/off). Not
 # universal: on a G7310 dishwasher (issue #16) the same opcodes answer HTTP 500 and have

@@ -54,3 +54,19 @@ dump_rest_resource:
             - "Ident"
             - "State"
             - "State.ExtendedState"
+
+select_program:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: miele_lan
+    program_id:
+      required: true
+      example: 200
+      selector:
+        number:
+          min: 0
+          max: 65535
+          mode: box
