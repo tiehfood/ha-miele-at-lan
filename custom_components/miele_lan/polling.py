@@ -20,6 +20,10 @@ POLL_FALLBACK_INTERVAL = 60  # seconds — idle appliances, and anything push-fe
 # active runtime rather than a brief catch-up burst; that's not something to
 # impose on someone else's LAN appliance without a much stronger case for it.
 POLL_ACTIVE_INTERVAL = 10  # seconds — no push, and mid-programme.
+# A running programme pushes often (RemainingTime changes every minute; an
+# oven capture showed gaps of 13-76 s), so a push channel silent this long
+# mid-programme has died and polling takes over.
+PUSH_STALE_AFTER = 300  # seconds
 
 
 def decide_poll_interval(*, is_push_active: bool, is_idle: bool) -> int:
@@ -34,4 +38,9 @@ def decide_poll_interval(*, is_push_active: bool, is_idle: bool) -> int:
     return POLL_ACTIVE_INTERVAL
 
 
-__all__ = ["POLL_FALLBACK_INTERVAL", "POLL_ACTIVE_INTERVAL", "decide_poll_interval"]
+__all__ = [
+    "POLL_FALLBACK_INTERVAL",
+    "POLL_ACTIVE_INTERVAL",
+    "PUSH_STALE_AFTER",
+    "decide_poll_interval",
+]

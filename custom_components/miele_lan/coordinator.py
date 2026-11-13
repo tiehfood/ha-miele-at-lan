@@ -37,7 +37,7 @@ from .const import (
 )
 from .dop2 import parse_global_device_context, parse_hours_of_operation
 from .enrollment import EnrolledDevice
-from .polling import POLL_FALLBACK_INTERVAL, decide_poll_interval
+from .polling import POLL_FALLBACK_INTERVAL, PUSH_STALE_AFTER, decide_poll_interval
 from .push_listener import PushEvent
 from .state_debug_log import render_state_for_log
 
@@ -347,8 +347,13 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         enrol successfully but never deliver a real push (the reason this
         adaptive cadence exists at all). Idle appliances have nothing to
         catch either way, so they stay on the slow interval regardless.
+        A channel that has gone quiet for PUSH_STALE_AFTER no longer counts.
         """
-        is_push_active = self.push_mode == "push:active"
+        is_push_active = (
+            self.push_mode == "push:active"
+            and self._last_push_at is not None
+            and time.time() - self._last_push_at < PUSH_STALE_AFTER
+        )
         is_idle = is_idle_state(self._data.state)
         new_interval = decide_poll_interval(is_push_active=is_push_active, is_idle=is_idle)
         current_interval = self.update_interval.total_seconds()
