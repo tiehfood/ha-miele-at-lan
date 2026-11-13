@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -35,8 +36,12 @@ from . import enums
 from .extended_state import (
     EXTRACTOR_SPEED_LABELS,
     hob_zone_count,
+    parse_g6992_energy_kwh,
+    parse_g6992_water_litres,
     parse_hob_extended_state,
     parse_kmda7876_extractor_speed,
+    parse_wmv960_energy_kwh,
+    parse_wmv960_water_litres,
 )
 from .const import (
     COOLING_FAMILY,
@@ -57,7 +62,7 @@ from .const import (
     is_idle_state,
     parse_minutes_field as _minutes,
 )
-from .coordinator import MieleLanCoordinator, model_name
+from .coordinator import MieleLanCoordinator, MieleLanData, model_name
 from .entity import MieleLanEntity
 
 
@@ -280,6 +285,28 @@ def _progress_percent(state: dict[str, Any]) -> int | None:
     return round(elapsed * 100 / (elapsed + remaining))
 
 
+def _energy_consumption(data: MieleLanData) -> float | None:
+    """Cycle energy in kWh from the model's ExtendedState layout."""
+    extended = data.state.get("ExtendedState")
+    model = model_name(data.ident)
+    if model == "WMV960":
+        return parse_wmv960_energy_kwh(extended)
+    if model == "G6992":
+        return parse_g6992_energy_kwh(extended)
+    return None
+
+
+def _water_consumption(data: MieleLanData) -> float | None:
+    """Cycle water in litres from the model's ExtendedState layout."""
+    extended = data.state.get("ExtendedState")
+    model = model_name(data.ident)
+    if model == "WMV960":
+        return parse_wmv960_water_litres(extended)
+    if model == "G6992":
+        return parse_g6992_water_litres(extended)
+    return None
+
+
 def _finish_time(state: dict[str, Any]) -> _dt.datetime | None:
     """now + delayed start + remaining, as the app's laundry EndTime (WMV960.cs:5177).
 
@@ -303,6 +330,9 @@ def _finish_time(state: dict[str, Any]) -> _dt.datetime | None:
 class MieleLanSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any]
     required_state_key: str | None = None
+    # Optional reader that also sees /Ident, for values whose layout depends on
+    # the model. Takes precedence over value_fn.
+    data_value_fn: Callable[[MieleLanData], Any] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -602,6 +632,47 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             native_unit_of_measurement=REVOLUTIONS_PER_MINUTE,
             required_state_key="SpinningSpeed",
             value_fn=_gated(lambda s: s.get("SpinningSpeed")),
+        ),
+    ),
+    # Cycle energy and water consumption from the ExtendedState of a washer or
+    # a dishwasher. Model-gated (see washer_consumption_supported and
+    # dishwasher_consumption_supported): the layouts have only been verified
+    # on a WMV960 and a G6992. Not status-gated on purpose: while the machine is
+    # on, the firmware keeps the finished cycle's totals until the next
+    # programme is selected, which is what a total_increasing sensor needs (a
+    # drop to a smaller value on the next cycle is read as a reset). Once the
+    # machine is switched off the blob is empty, MieleLanConsumptionSensor
+    # then keeps the last total so the Energy dashboard sees no unknown state.
+    MieleLanSensorDef(
+        types=(MieleAppliance.WASHING_MACHINE, MieleAppliance.DISHWASHER),
+        description=MieleLanSensorDescription(
+            key="energy_consumption",
+            translation_key="energy_consumption",
+            device_class=SensorDeviceClass.ENERGY,
+            native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            required_state_key="ExtendedState",
+            value_fn=lambda s: None,  # replaced by data_value_fn, which picks the model layout
+            data_value_fn=_energy_consumption,
+        ),
+        supported_fn=lambda coord: (
+            coord.washer_consumption_supported or coord.dishwasher_consumption_supported
+        ),
+    ),
+    MieleLanSensorDef(
+        types=(MieleAppliance.WASHING_MACHINE, MieleAppliance.DISHWASHER),
+        description=MieleLanSensorDescription(
+            key="water_consumption",
+            translation_key="water_consumption",
+            device_class=SensorDeviceClass.WATER,
+            native_unit_of_measurement=UnitOfVolume.LITERS,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            required_state_key="ExtendedState",
+            value_fn=lambda s: None,  # replaced by data_value_fn, which picks the model layout
+            data_value_fn=_water_consumption,
+        ),
+        supported_fn=lambda coord: (
+            coord.washer_consumption_supported or coord.dishwasher_consumption_supported
         ),
     ),
     # --- Raw (diagnostic) siblings of gated cycle-family sensors -------------
@@ -1171,6 +1242,8 @@ async def async_setup_entry(
                 entities.append(MieleLanProgramSensor(coord, d.description))
             elif key in ("program_id_raw", "program_phase_raw"):
                 entities.append(MieleLanProgramRawSensor(coord, d.description))
+            elif key in ("energy_consumption", "water_consumption"):
+                entities.append(MieleLanConsumptionSensor(coord, d.description))
             else:
                 entities.append(MieleLanSensor(coord, d.description))
         for d in IDENT_SENSORS:
@@ -1254,9 +1327,42 @@ class MieleLanSensor(MieleLanEntity, SensorEntity):
         if not self.coordinator.data:
             return None
         try:
+            if self.entity_description.data_value_fn is not None:
+                return self.entity_description.data_value_fn(self.coordinator.data)
             return self.entity_description.value_fn(self.coordinator.data.state)
         except Exception:  # noqa: BLE001
             return None
+
+
+class MieleLanConsumptionSensor(MieleLanSensor, RestoreSensor):
+    """Cycle energy or water total that outlives the appliance being switched off.
+
+    An appliance that is switched off reports an empty ExtendedState, which
+    would turn the sensor unknown. The Energy dashboard reports an error for
+    an unknown entity, and these appliances are off most of the day. The
+    sensor therefore keeps the last total it read, also across a restart. A
+    drop to a smaller value on the next cycle is read as a reset by the
+    total_increasing state class.
+    """
+
+    def __init__(
+        self, coordinator: MieleLanCoordinator, description: MieleLanSensorDescription
+    ) -> None:
+        super().__init__(coordinator, description)
+        self._last_value: float | None = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_sensor_data()
+        if last is not None and isinstance(last.native_value, (int, float)):
+            self._last_value = last.native_value
+
+    @property
+    def native_value(self) -> Any:
+        value = super().native_value
+        if value is not None:
+            self._last_value = value
+        return self._last_value
 
 
 class MieleLanProgramSensor(MieleLanEntity, SensorEntity):

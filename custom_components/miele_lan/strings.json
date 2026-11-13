@@ -1101,6 +1101,12 @@
       "spin_speed": {
         "name": "Spin speed"
       },
+      "energy_consumption": {
+        "name": "Energy consumption"
+      },
+      "water_consumption": {
+        "name": "Water consumption"
+      },
       "plate_1_step": {
         "name": "Cooking zone 1 power",
         "state": {

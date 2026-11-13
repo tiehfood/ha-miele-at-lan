@@ -192,3 +192,91 @@ def parse_kmda7876_extractor_speed(hex_str: str | None) -> str | None:
     if len(payload) != KMDA7876_EXTENDED_STATE_LENGTH:
         return None
     return EXTRACTOR_SPEED_LABELS.get(payload[KMDA7876_EXTRACTOR_SPEED_OFFSET])
+
+
+# Observed on a WMV960 WPS washing machine (XKM3100W, firmware 02.72) during
+# a 60 C cotton cycle, 2026-11-03. The blob is 67 bytes whenever the machine
+# is powered on (both counters read zero until a programme runs) and empty
+# once it is switched off. Both counters are
+# big-endian u16 and were checked against the Miele app every few seconds:
+# water rose 23 -> 68 litres and energy went 14 -> 15 (1.4 -> 1.5 kWh) and
+# both kept their final values after the cycle ended. Keep the exact length
+# restriction until other models have been captured and verified.
+WMV960_EXTENDED_STATE_LENGTH = 67
+WMV960_ENERGY_OFFSET = 50
+WMV960_WATER_OFFSET = 52
+
+
+def _wmv960_u16(hex_str: str | None, offset: int) -> int | None:
+    if not isinstance(hex_str, str):
+        return None
+    try:
+        payload = bytes.fromhex(hex_str)
+    except ValueError:
+        return None
+    if len(payload) != WMV960_EXTENDED_STATE_LENGTH:
+        return None
+    return int.from_bytes(payload[offset:offset + 2], "big")
+
+
+def parse_wmv960_energy_kwh(hex_str: str | None) -> float | None:
+    """Read the WMV960 energy counter (bytes 50-51, tenths of a kWh).
+
+    The caller must gate this device-specific layout by model.
+    """
+    raw = _wmv960_u16(hex_str, WMV960_ENERGY_OFFSET)
+    return None if raw is None else raw / 10
+
+
+def parse_wmv960_water_litres(hex_str: str | None) -> int | None:
+    """Read the WMV960 water counter (bytes 52-53, litres).
+
+    The caller must gate this device-specific layout by model.
+    """
+    return _wmv960_u16(hex_str, WMV960_WATER_OFFSET)
+
+
+# Observed on a G6992 dishwasher (EK039W, firmware 02.72, protocol 2) through
+# a Quick PowerWash and an Automatic cycle, 2026-11-03. The blob is 24 bytes
+# while the machine is on and empty once it is switched off. Energy is a u8
+# in tenths of a kWh at byte 16 and water is a big-endian u16 in tenths of a
+# litre at bytes 17-18. Both were compared with the Miele app during the
+# cycles (water 3.7, 5.3 and 10.7 l, energy 0.4 and 0.5 kWh). They reset to
+# zero when a new programme starts and keep the finished cycle's totals
+# until then. Keep the exact length restriction until other dishwashers have
+# been captured and verified.
+G6992_EXTENDED_STATE_LENGTH = 24
+G6992_ENERGY_OFFSET = 16
+G6992_WATER_OFFSET = 17
+
+
+def _g6992_payload(hex_str: str | None) -> bytes | None:
+    if not isinstance(hex_str, str):
+        return None
+    try:
+        payload = bytes.fromhex(hex_str)
+    except ValueError:
+        return None
+    return payload if len(payload) == G6992_EXTENDED_STATE_LENGTH else None
+
+
+def parse_g6992_energy_kwh(hex_str: str | None) -> float | None:
+    """Read the G6992 energy counter (byte 16, tenths of a kWh).
+
+    The caller must gate this device-specific layout by model.
+    """
+    payload = _g6992_payload(hex_str)
+    return None if payload is None else payload[G6992_ENERGY_OFFSET] / 10
+
+
+def parse_g6992_water_litres(hex_str: str | None) -> float | None:
+    """Read the G6992 water counter (bytes 17-18, tenths of a litre).
+
+    The caller must gate this device-specific layout by model.
+    """
+    payload = _g6992_payload(hex_str)
+    if payload is None:
+        return None
+    return int.from_bytes(
+        payload[G6992_WATER_OFFSET:G6992_WATER_OFFSET + 2], "big"
+    ) / 10

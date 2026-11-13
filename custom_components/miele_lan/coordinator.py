@@ -187,6 +187,26 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         return self.device_type in HOB_FAMILY and model_name(self._data.ident) == "KMDA7876"
 
     @property
+    def washer_consumption_supported(self) -> bool:
+        """Whether this model has a verified energy/water ExtendedState layout.
+
+        Only WMV960 has been captured. Other washing machines can use a
+        different payload, so do not enable this for unverified models.
+        """
+        model = model_name(self._data.ident)
+        return self.device_type is MieleAppliance.WASHING_MACHINE and model == "WMV960"
+
+    @property
+    def dishwasher_consumption_supported(self) -> bool:
+        """Whether this model has a verified energy/water ExtendedState layout.
+
+        Only G6992 has been captured. Other dishwashers can use a different
+        payload, so do not enable this for unverified models.
+        """
+        model = model_name(self._data.ident)
+        return self.device_type is MieleAppliance.DISHWASHER and model == "G6992"
+
+    @property
     def hood_dop1_supported(self) -> bool:
         """Whether this appliance takes the hood Dop1 writes (fan, light, settings).
 
