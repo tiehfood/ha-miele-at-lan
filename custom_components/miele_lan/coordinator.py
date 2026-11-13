@@ -23,7 +23,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import MieleLanClient
+from .api import ActionRejectedError, MieleLanClient
 from .const import (
     DOMAIN,
     DISHWASHER_FAMILY,
@@ -517,6 +517,14 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 # allows, and retry once before the next poll cycle.
                 try:
                     await self.client.wake()
+                except ActionRejectedError as err:
+                    # Some appliances answer the wake with a `Failure` entry.
+                    # The app ignores the answer and retries after 3 s, so
+                    # only real connection errors count as a miss.
+                    _LOGGER.debug(
+                        "[%s] DOP2 2/1585 got 500 (asleep), wake answered %s, retrying anyway",
+                        self.fab, err,
+                    )
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.debug(
                         "[%s] DOP2 2/1585 got 500 (asleep), wake failed: %s",
