@@ -29,7 +29,7 @@ def make_entities(tmp_path, monkeypatch):
     def make():
         hass = HomeAssistant(str(tmp_path))
         coord = MieleLanCoordinator(
-            hass, SimpleNamespace(entry_id="test"),
+            hass, SimpleNamespace(entry_id="test", async_on_unload=lambda unsub: None),
             SimpleNamespace(route="test-dish", host="192.0.2.1"), "test-dish",
         )
         coord._data = MieleLanData(
@@ -41,7 +41,7 @@ def make_entities(tmp_path, monkeypatch):
 
         async def build():
             out = []
-            await sensor.async_setup_entry(hass, SimpleNamespace(entry_id="test"), out.extend)
+            await sensor.async_setup_entry(hass, SimpleNamespace(entry_id="test", async_on_unload=lambda unsub: None), out.extend)
             return {e.unique_id: e for e in out}
 
         return coord, build

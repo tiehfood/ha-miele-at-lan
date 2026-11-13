@@ -62,7 +62,7 @@ from .const import (
     is_idle_state,
     parse_minutes_field as _minutes,
 )
-from .coordinator import MieleLanCoordinator, model_name
+from .coordinator import MieleLanCoordinator, MieleLanData, model_name
 from .entity import MieleLanEntity
 
 
@@ -330,6 +330,9 @@ def _finish_time(state: dict[str, Any]) -> _dt.datetime | None:
 class MieleLanSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any]
     required_state_key: str | None = None
+    # Optional reader that also sees /Ident, for values whose layout depends on
+    # the model. Takes precedence over value_fn.
+    data_value_fn: Callable[[MieleLanData], Any] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -649,7 +652,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
             state_class=SensorStateClass.TOTAL_INCREASING,
             required_state_key="ExtendedState",
-            value_fn=lambda s: parse_wmv960_energy_kwh(s.get("ExtendedState")),
+            value_fn=lambda s: None,  # replaced by data_value_fn, which picks the model layout
             data_value_fn=_energy_consumption,
         ),
         supported_fn=lambda coord: (
@@ -665,7 +668,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             native_unit_of_measurement=UnitOfVolume.LITERS,
             state_class=SensorStateClass.TOTAL_INCREASING,
             required_state_key="ExtendedState",
-            value_fn=lambda s: parse_wmv960_water_litres(s.get("ExtendedState")),
+            value_fn=lambda s: None,  # replaced by data_value_fn, which picks the model layout
             data_value_fn=_water_consumption,
         ),
         supported_fn=lambda coord: (
@@ -1324,6 +1327,8 @@ class MieleLanSensor(MieleLanEntity, SensorEntity):
         if not self.coordinator.data:
             return None
         try:
+            if self.entity_description.data_value_fn is not None:
+                return self.entity_description.data_value_fn(self.coordinator.data)
             return self.entity_description.value_fn(self.coordinator.data.state)
         except Exception:  # noqa: BLE001
             return None

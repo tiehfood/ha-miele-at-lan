@@ -56,7 +56,7 @@ def make_coordinator(tmp_path, monkeypatch):
     def make(model="G6992", device_type=MieleAppliance.DISHWASHER, extended=None):
         hass = HomeAssistant(str(tmp_path))
         coord = MieleLanCoordinator(
-            hass, SimpleNamespace(entry_id="test"),
+            hass, SimpleNamespace(entry_id="test", async_on_unload=lambda unsub: None),
             SimpleNamespace(route="test-dish", host="192.0.2.1"), "test-dish",
         )
         coord._data = MieleLanData(
@@ -83,7 +83,7 @@ def make_coordinator(tmp_path, monkeypatch):
 async def test_real_entity_selection(make_coordinator, model, device_type, expected):
     hass, coord = make_coordinator(model, device_type)
     entities = []
-    await sensor.async_setup_entry(hass, SimpleNamespace(entry_id="test"), entities.extend)
+    await sensor.async_setup_entry(hass, SimpleNamespace(entry_id="test", async_on_unload=lambda unsub: None), entities.extend)
     by_id = {e.unique_id: e for e in entities}
     energy = by_id.get("test-dish_energy_consumption")
     water = by_id.get("test-dish_water_consumption")
@@ -101,7 +101,7 @@ async def test_washer_layout_is_not_used_for_a_dishwasher(make_coordinator):
     washer_blob = "00" * 67
     hass, coord = make_coordinator(extended=washer_blob)
     entities = []
-    await sensor.async_setup_entry(hass, SimpleNamespace(entry_id="test"), entities.extend)
+    await sensor.async_setup_entry(hass, SimpleNamespace(entry_id="test", async_on_unload=lambda unsub: None), entities.extend)
     by_id = {e.unique_id: e for e in entities}
     assert by_id["test-dish_energy_consumption"].native_value is None
     assert by_id["test-dish_water_consumption"].native_value is None

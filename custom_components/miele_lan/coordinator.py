@@ -193,7 +193,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         Only WMV960 has been captured. Other washing machines can use a
         different payload, so do not enable this for unverified models.
         """
-        model = "".join(str(self._data.ident.get("tech_type") or "").upper().split())
+        model = model_name(self._data.ident)
         return self.device_type is MieleAppliance.WASHING_MACHINE and model == "WMV960"
 
     @property
@@ -203,7 +203,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         Only G6992 has been captured. Other dishwashers can use a different
         payload, so do not enable this for unverified models.
         """
-        model = "".join(str(self._data.ident.get("tech_type") or "").upper().split())
+        model = model_name(self._data.ident)
         return self.device_type is MieleAppliance.DISHWASHER and model == "G6992"
 
     @property
