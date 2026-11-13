@@ -490,6 +490,16 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 f"/Devices/{self.fab}/DOP2/2/1585?idx1=0&idx2=0",
                 allowed_status=(200, 403, 404, 500),
             )
+            if st == 500 and self.device_type in LAUNDRY_FAMILY:
+                # Waking a washer or dryer switches it on (door light and
+                # display, #65), so a background read must not do it. Skip
+                # this cycle without counting a miss; the leaf is read on
+                # the next cycle the appliance is awake.
+                _LOGGER.debug(
+                    "[%s] DOP2 2/1585 got 500 (asleep), not waking laundry appliance",
+                    self.fab,
+                )
+                return
             if st == 500:
                 # Sleeping XKM — wake it, give it the same ~3s the app
                 # allows, and retry once before the next poll cycle.
