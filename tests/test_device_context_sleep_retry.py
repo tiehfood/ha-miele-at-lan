@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT))
 
 import custom_components.miele_lan.coordinator as coordinator_mod  # noqa: E402
 from custom_components.miele_lan.const import MieleAppliance  # noqa: E402
+from custom_components.miele_lan.coordinator import DEVICE_CONTEXT_MAX_MISS_CYCLES  # noqa: E402
 
 FIXTURE = Path(__file__).parent / "fixtures" / "g7655_dop2_1585.hex"
 LEAF_URL_BODY = (200, bytes.fromhex(FIXTURE.read_text().replace("\n", "")))
@@ -256,4 +257,26 @@ def test_sleeping_laundry_appliance_is_not_woken(device_type: MieleAppliance) ->
     coord.client.wake.assert_not_awaited()
     assert coord.client.raw.calls == 1
     assert coord._device_context_miss_cycles == 0
+    assert coord._device_context_unsupported is False
+
+
+def test_laundry_sleep_ends_a_streak_of_fetch_failures() -> None:
+    """Isolated timeouts weeks apart must not add up to a latch (#70)."""
+
+    class _BoomRaw(_StubRaw):
+        async def _request_bytes(self, method: str, resource: str, **kwargs: Any):
+            raise TimeoutError()
+
+    coord = _make_coordinator([], MieleAppliance.TUMBLE_DRYER)
+    sleeping = coord.client.raw
+    for _ in range(DEVICE_CONTEXT_MAX_MISS_CYCLES):
+        coord.client.raw = _BoomRaw([])  # type: ignore[assignment]
+        _reset_throttle(coord)
+        asyncio.run(_run(coord))
+        assert coord._device_context_miss_cycles == 1
+        coord.client.raw = sleeping
+        coord.client.set_statuses([500])
+        _reset_throttle(coord)
+        asyncio.run(_run(coord))
+        assert coord._device_context_miss_cycles == 0
     assert coord._device_context_unsupported is False

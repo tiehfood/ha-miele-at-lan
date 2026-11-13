@@ -494,7 +494,10 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 # Waking a washer or dryer switches it on (door light and
                 # display, #65), so a background read must not do it. Skip
                 # this cycle without counting a miss; the leaf is read on
-                # the next cycle the appliance is awake.
+                # the next cycle the appliance is awake. The answer also ends
+                # a streak of timeouts, so isolated ones cannot add up to a
+                # latch across weeks of sleep.
+                self._device_context_miss_cycles = 0
                 _LOGGER.debug(
                     "[%s] DOP2 2/1585 got 500 (asleep), not waking laundry appliance",
                     self.fab,
