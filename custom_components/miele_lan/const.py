@@ -14,9 +14,9 @@ DEFAULT_TIMEOUT = 10.0
 # Oven.UI.1.dll:45992 BuildStateFor(OvenState) and
 # LaundryCareMappi.UI.dll:38047 GetActionBarLeftText): the app's action bar
 # only shows ProgramPhase when state == Running (5). We extend this to also
-# hide for Off / On / Service / Default / Locked / NotConnected — the firmware
+# hide for Off / On / Idle / Service / Default / Locked / NotConnected — the firmware
 # keeps the last ProgramID/ProgramPhase cached until the next cycle starts.
-IDLE_STATUSES = {1, 2, 8, 12, 144, 145, 255}
+IDLE_STATUSES = {1, 2, 8, 10, 12, 144, 145, 255}
 
 
 def is_idle_state(state: dict[str, Any]) -> bool:
