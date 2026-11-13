@@ -140,6 +140,18 @@ BINARY_SENSOR_TYPES: tuple[MieleLanBinarySensorDef, ...] = (
     # remoteEnable.{fullRemoteControl,smartGrid,mobileStart}. Verified against a
     # live WER875 reporting [15, 1, 0] while the cloud reported
     # fullRemoteControl=on, smartGrid=on, mobileStart=off.
+    # Smart Grid is the second RemoteEnable slot. Laundry only: on a WMV960
+    # the slot followed the Smart Grid setting in the machine's menu (1 when
+    # on, 0 when off). A dishwasher and an oven always report 0 there, and the
+    # dishwasher's own SmartStart setting does not move it.
+    MieleLanBinarySensorDef(
+        types=LAUNDRY_FAMILY,
+        description=MieleLanBinarySensorDescription(
+            key="smart_grid",
+            translation_key="smart_grid",
+            is_on_fn=lambda s: bool((s.get("RemoteEnable") or [0, 0, 0])[1]),  # type: ignore[index]
+        ),
+    ),
     MieleLanBinarySensorDef(
         types=CYCLE_FAMILY,
         description=MieleLanBinarySensorDescription(
