@@ -38,6 +38,8 @@ from .extended_state import (
     hob_zone_count,
     parse_g6992_energy_kwh,
     parse_g6992_water_litres,
+    parse_h6800bmx_cavity_temperature,
+    parse_h6800bmx_core_temperature,
     parse_hob_extended_state,
     parse_kmda7876_extractor_speed,
     parse_wmv960_energy_kwh,
@@ -263,6 +265,20 @@ def _temp_or_none(temps: Any, idx: int, *, divisor: int = 100) -> int | float | 
     return v / divisor if divisor > 1 else v
 
 
+def _oven_cavity_temperature(data: MieleLanData) -> int | float | None:
+    """/State.Temperature first, then the H6800BMX ExtendedState layout.
+
+    The H6800BMX reports the -32768 sentinel in /State.Temperature while the
+    cavity temperature is in its ExtendedState, so only that model falls back.
+    """
+    value = _temp_or_none(data.state.get("Temperature"), 0)
+    if value is not None:
+        return value
+    if model_name(data.ident) != "H6800BMX":
+        return None
+    return parse_h6800bmx_cavity_temperature(data.state.get("ExtendedState"))
+
+
 def _utcnow() -> _dt.datetime:
     return _dt.datetime.now(_dt.timezone.utc)
 
@@ -305,6 +321,20 @@ def _water_consumption(data: MieleLanData) -> float | None:
     if model == "G6992":
         return parse_g6992_water_litres(extended)
     return None
+
+
+def _oven_core_temperature(data: MieleLanData) -> int | float | None:
+    """/State.Temperature[1] first, then the H6800BMX food probe in ExtendedState.
+
+    Same model gate as the cavity temperature, the probe is empty in /State on
+    that oven.
+    """
+    value = _temp_or_none(data.state.get("Temperature"), 1)
+    if value is not None:
+        return value
+    if model_name(data.ident) != "H6800BMX":
+        return None
+    return parse_h6800bmx_core_temperature(data.state.get("ExtendedState"))
 
 
 def _finish_time(state: dict[str, Any]) -> _dt.datetime | None:
@@ -470,6 +500,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             native_unit_of_measurement=UnitOfTemperature.CELSIUS,
             state_class=SensorStateClass.MEASUREMENT,
             value_fn=lambda s: _temp_or_none(s.get("Temperature"), 0),
+            data_value_fn=_oven_cavity_temperature,
         ),
     ),
     MieleLanSensorDef(
@@ -481,6 +512,7 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             native_unit_of_measurement=UnitOfTemperature.CELSIUS,
             state_class=SensorStateClass.MEASUREMENT,
             value_fn=lambda s: _temp_or_none(s.get("Temperature"), 1),
+            data_value_fn=_oven_core_temperature,
         ),
     ),
     # TargetTemperature[0] is also the wash-cycle target on laundry appliances
