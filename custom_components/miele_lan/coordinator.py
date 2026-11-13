@@ -64,6 +64,11 @@ IDENT_SETUP_RETRY_DELAY = 1.0  # seconds between those retries.
 POLL_FAILURE_TOLERANCE = 2  # consecutive failed polls tolerated before UpdateFailed
 
 
+def model_name(ident: dict[str, Any]) -> str:
+    """Upper-case TechType of the appliance without whitespace, "" when unknown."""
+    return "".join(str(ident.get("tech_type") or "").upper().split())
+
+
 def _describe_update_error(err: Exception) -> str:
     """Name the exception type, appending its message when it has one.
 
@@ -179,8 +184,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         KMDA7876 can identify as an ordinary induction hob, so device type
         74 alone is insufficient. Do not enable this for unverified models.
         """
-        model = "".join(str(self._data.ident.get("tech_type") or "").upper().split())
-        return self.device_type in HOB_FAMILY and model == "KMDA7876"
+        return self.device_type in HOB_FAMILY and model_name(self._data.ident) == "KMDA7876"
 
     @property
     def hood_dop1_supported(self) -> bool:

@@ -209,8 +209,9 @@ DishWasherProgramId: dict[int, str] = {
     36: 'extra_quiet',
     37: 'hygiene',
     38: 'quick_power_wash',
+    39: 'pasta_paela',
     42: 'tall_items',
-    44: 'power_wash',
+    44: 'glasses_warm',
     200: 'eco',
     202: 'automatic',
     203: 'comfort_wash',
@@ -483,6 +484,18 @@ ProgramPhaseMicrowave: dict[int, str] = {
     65535: 'not_running',
 }
 
+# The H6800BMX reports its own ProgramID numbers for the manual heating
+# functions. They are absent from the shared table above and clash with it
+# (8 is steam cooking on steam ovens), so they apply to this model only.
+H6800BMXProgramId: dict[int, str] = {
+    2: 'auto_roast',
+    3: 'grill',
+    4: 'fan_plus',
+    5: 'intensive_bake',
+    8: 'fan_grill',
+    15: 'browning',
+}
+
 ProgramPhaseMicrowaveOvenCombo: dict[int, str] = {
     0: 'not_running',
     3329: 'heating_up_phase',
@@ -507,6 +520,11 @@ ProgramPhaseOven: dict[int, str] = {
     3081: 'roasting',
     3084: 'energy_save',
     3099: 'pre_heating',
+    3328: 'cooling_down',
+    3329: 'heating_up_phase',
+    3330: 'process_running',
+    3334: 'process_finished',
+    3336: 'roasting',
     65535: 'not_running',
 }
 
@@ -1193,9 +1211,12 @@ TumbleDryerProgramId: dict[int, str] = {
     17: 'silks_handcare',
     19: 'standard_pillows',
     20: 'cottons',
+    21: 'cottons',
     22: 'basket_program',
     23: 'cottons_hygiene',
     24: 'smoothing',
+    25: 'cottons',
+    26: 'cottons_eco',
     30: 'minimum_iron',
     31: 'bed_linen',
     40: 'woollens_handcare',
@@ -1209,12 +1230,15 @@ TumbleDryerProgramId: dict[int, str] = {
     120: 'proofing',
     130: 'denim',
     131: 'gentle_denim',
+    140: 'shirts',
     150: 'sportswear',
     160: 'outerwear',
     170: 'silks_handcare',
     190: 'standard_pillows',
+    200: 'large_pillows',
     220: 'basket_program',
     240: 'smoothing',
+    250: 'extra_quiet',
     10001: 'cottons',
     10016: 'minimum_iron',
     10022: 'delicates',
@@ -1289,6 +1313,8 @@ WashingMachineProgramId: dict[int, str] = {
     52: 'separate_rinse_starch',
     53: 'first_wash',
     69: 'cottons_hygiene',
+    75: 'steam_finish',
+    76: 'refresh',
     77: 'trainers',
     91: 'clean_machine',
     95: 'down_duvets',
