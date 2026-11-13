@@ -934,6 +934,12 @@
       "start_in_minutes": {
         "name": "Start in"
       },
+      "progress": {
+        "name": "Progress"
+      },
+      "finish_time": {
+        "name": "Finish time"
+      },
       "cavity_temperature": {
         "name": "Cavity temperature"
       },

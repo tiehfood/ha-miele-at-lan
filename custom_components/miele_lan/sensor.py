@@ -20,6 +20,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    PERCENTAGE,
     REVOLUTIONS_PER_MINUTE,
     EntityCategory,
     UnitOfEnergy,
@@ -48,6 +49,9 @@ from .const import (
     PROCESS_ACTION_PAUSE,
     PROCESS_ACTION_START,
     PROCESS_ACTION_STOP,
+    STATUS_IN_USE,
+    STATUS_PAUSE,
+    STATUS_PROGRAM_ENDED,
     WINE_FAMILY,
     MieleAppliance,
     is_idle_state,
@@ -245,12 +249,43 @@ def _temp_or_none(temps: Any, idx: int, *, divisor: int = 100) -> int | float | 
     return v / divisor if divisor > 1 else v
 
 
-def _utc_iso_now_plus(minutes: int | None) -> str | None:
-    if minutes is None:
+def _utcnow() -> _dt.datetime:
+    return _dt.datetime.now(_dt.timezone.utc)
+
+
+def _progress_percent(state: dict[str, Any]) -> int | None:
+    """elapsed / (elapsed + remaining), full at programme end.
+
+    The app's laundry GetProgress (WMV960.cs:7851) and oven progress
+    (Oven DOP1.cs:6077, DOP1.1.cs:4697) compute it this way from /State.
+    """
+    status = state.get("Status")
+    if status == STATUS_PROGRAM_ENDED:
+        return 100
+    if status not in (STATUS_IN_USE, STATUS_PAUSE):
         return None
-    return (
-        _dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(minutes=minutes)
-    ).replace(microsecond=0).isoformat()
+    elapsed = _minutes(state.get("ElapsedTime"))
+    remaining = _minutes(state.get("RemainingTime"))
+    if elapsed is None or remaining is None or elapsed + remaining == 0:
+        return None
+    return round(elapsed * 100 / (elapsed + remaining))
+
+
+def _finish_time(state: dict[str, Any]) -> _dt.datetime | None:
+    """now + delayed start + remaining, as the app's laundry EndTime (WMV960.cs:5177).
+
+    Floored to the minute: /State only resolves minutes, so seconds would
+    only make the timestamp jitter between polls.
+    """
+    if _is_idle(state):
+        return None
+    remaining = _minutes(state.get("RemainingTime"))
+    if not remaining:
+        return None
+    delay = _minutes(state.get("StartTime")) or 0
+    return (_utcnow() + _dt.timedelta(minutes=delay + remaining)).replace(
+        second=0, microsecond=0
+    )
 
 
 # --- entity descriptions ------------------------------------------------------
@@ -366,6 +401,24 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
             device_class=SensorDeviceClass.DURATION,
             native_unit_of_measurement=UnitOfTime.MINUTES,
             value_fn=_gated(lambda s: _minutes(s.get("StartTime"))),
+        ),
+    ),
+    MieleLanSensorDef(
+        types=CYCLE_FAMILY,
+        description=MieleLanSensorDescription(
+            key="progress",
+            translation_key="progress",
+            native_unit_of_measurement=PERCENTAGE,
+            value_fn=_progress_percent,
+        ),
+    ),
+    MieleLanSensorDef(
+        types=CYCLE_FAMILY,
+        description=MieleLanSensorDescription(
+            key="finish_time",
+            translation_key="finish_time",
+            device_class=SensorDeviceClass.TIMESTAMP,
+            value_fn=_finish_time,
         ),
     ),
     # Cavity + core temperature — only oven-family
