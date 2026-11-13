@@ -827,6 +827,7 @@
           "2nd_grinding": "2. Mahlung",
           "2nd_pre_brewing": "2. Vorbrühen",
           "anti_crease": "Knitterschutz",
+          "auto_open": "AutoOpen",
           "automatic_start": "Automatischer Start",
           "blocked_brushes": "Bürsten blockiert",
           "blocked_drive_wheels": "Antriebsräder blockiert",
@@ -846,6 +847,7 @@
           "energy_save": "Energie sparen",
           "espresso": "Espresso-Kaffee",
           "extra_dry": "Extra trocken",
+          "fan_run": "Gebläsenachlauf",
           "final_rinse": "Letzter Spülgang",
           "finished": "Fertig",
           "flex_load_active": "FlexLoad aktiv",
@@ -873,6 +875,7 @@
           "normal_plus": "Normal plus",
           "not_running": "Außer Betrieb",
           "perfect_dry_active": "PerfectDry aktiv",
+          "post_rinse": "Nachspülen",
           "pre_brewing": "Vorbrühen",
           "pre_dishwash": "Vorreinigung",
           "pre_heating": "Vorheizen",
@@ -890,6 +893,9 @@
           "roasting": "Braten",
           "safety_cooling": "Sicherheitskühlung",
           "searing": "Anbraten",
+          "second_espresso": "2. Espresso-Kaffee",
+          "second_grinding": "2. Mahlung",
+          "second_pre_brewing": "2. Vorbrühen",
           "slightly_dry": "Leicht trocken",
           "slow_roasting": "Langsames Braten",
           "smoothing": "Glätten",
@@ -908,10 +914,7 @@
           "warm_air": "Warme Luft",
           "warm_cups_glasses": "Tassen/Gläser vorwärmen",
           "warm_dishes_plates": "Geschirr/Teller vorwärmen",
-          "wheel_lifted": "Rad angehoben",
-          "second_espresso": "2. Espresso-Kaffee",
-          "second_grinding": "2. Mahlung",
-          "second_pre_brewing": "2. Vorbrühen"
+          "wheel_lifted": "Rad angehoben"
         }
       },
       "program_type": {
@@ -1978,6 +1981,7 @@
           "2nd_grinding": "2. Mahlung",
           "2nd_pre_brewing": "2. Vorbrühen",
           "anti_crease": "Knitterschutz",
+          "auto_open": "AutoOpen",
           "automatic_start": "Automatischer Start",
           "blocked_brushes": "Bürsten blockiert",
           "blocked_drive_wheels": "Antriebsräder blockiert",
@@ -1997,6 +2001,7 @@
           "energy_save": "Energie sparen",
           "espresso": "Espresso-Kaffee",
           "extra_dry": "Extra trocken",
+          "fan_run": "Gebläsenachlauf",
           "final_rinse": "Letzter Spülgang",
           "finished": "Fertig",
           "flex_load_active": "FlexLoad aktiv",
@@ -2024,6 +2029,7 @@
           "normal_plus": "Normal plus",
           "not_running": "Außer Betrieb",
           "perfect_dry_active": "PerfectDry aktiv",
+          "post_rinse": "Nachspülen",
           "pre_brewing": "Vorbrühen",
           "pre_dishwash": "Vorreinigung",
           "pre_heating": "Vorheizen",
@@ -2041,6 +2047,9 @@
           "roasting": "Braten",
           "safety_cooling": "Sicherheitskühlung",
           "searing": "Anbraten",
+          "second_espresso": "2. Espresso-Kaffee",
+          "second_grinding": "2. Mahlung",
+          "second_pre_brewing": "2. Vorbrühen",
           "slightly_dry": "Leicht trocken",
           "slow_roasting": "Langsames Braten",
           "smoothing": "Glätten",
@@ -2059,10 +2068,7 @@
           "warm_air": "Warme Luft",
           "warm_cups_glasses": "Tassen/Gläser vorwärmen",
           "warm_dishes_plates": "Geschirr/Teller vorwärmen",
-          "wheel_lifted": "Rad angehoben",
-          "second_espresso": "2. Espresso-Kaffee",
-          "second_grinding": "2. Mahlung",
-          "second_pre_brewing": "2. Vorbrühen"
+          "wheel_lifted": "Rad angehoben"
         }
       },
       "program_type_raw": {

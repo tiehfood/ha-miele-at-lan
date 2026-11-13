@@ -827,6 +827,7 @@
           "2nd_grinding": "2nd grinding",
           "2nd_pre_brewing": "2nd pre-brewing",
           "anti_crease": "Anti-crease",
+          "auto_open": "AutoOpen",
           "automatic_start": "Automatic start",
           "blocked_brushes": "Brushes blocked",
           "blocked_drive_wheels": "Drive wheels blocked",
@@ -846,6 +847,7 @@
           "energy_save": "Energy save",
           "espresso": "Espresso coffee",
           "extra_dry": "Extra dry",
+          "fan_run": "Fan run",
           "final_rinse": "Final rinse",
           "finished": "Finished",
           "flex_load_active": "FlexLoad active",
@@ -873,6 +875,7 @@
           "normal_plus": "Normal plus",
           "not_running": "Not running",
           "perfect_dry_active": "PerfectDry active",
+          "post_rinse": "Post-rinse",
           "pre_brewing": "Pre-brewing",
           "pre_dishwash": "Pre-cleaning",
           "pre_heating": "Pre-heating",
@@ -890,6 +893,9 @@
           "roasting": "Roasting",
           "safety_cooling": "Safety cooling",
           "searing": "Searing",
+          "second_espresso": "2nd espresso coffee",
+          "second_grinding": "2nd grinding",
+          "second_pre_brewing": "2nd pre-brewing",
           "slightly_dry": "Slightly dry",
           "slow_roasting": "Slow roasting",
           "smoothing": "Smoothing",
@@ -908,10 +914,7 @@
           "warm_air": "Warm air",
           "warm_cups_glasses": "Warm cups/glasses",
           "warm_dishes_plates": "Warm dishes/plates",
-          "wheel_lifted": "Wheel lifted",
-          "second_espresso": "2nd espresso coffee",
-          "second_grinding": "2nd grinding",
-          "second_pre_brewing": "2nd pre-brewing"
+          "wheel_lifted": "Wheel lifted"
         }
       },
       "program_type": {
@@ -1978,6 +1981,7 @@
           "2nd_grinding": "2nd grinding",
           "2nd_pre_brewing": "2nd pre-brewing",
           "anti_crease": "Anti-crease",
+          "auto_open": "AutoOpen",
           "automatic_start": "Automatic start",
           "blocked_brushes": "Brushes blocked",
           "blocked_drive_wheels": "Drive wheels blocked",
@@ -1997,6 +2001,7 @@
           "energy_save": "Energy save",
           "espresso": "Espresso coffee",
           "extra_dry": "Extra dry",
+          "fan_run": "Fan run",
           "final_rinse": "Final rinse",
           "finished": "Finished",
           "flex_load_active": "FlexLoad active",
@@ -2024,6 +2029,7 @@
           "normal_plus": "Normal plus",
           "not_running": "Not running",
           "perfect_dry_active": "PerfectDry active",
+          "post_rinse": "Post-rinse",
           "pre_brewing": "Pre-brewing",
           "pre_dishwash": "Pre-cleaning",
           "pre_heating": "Pre-heating",
@@ -2041,6 +2047,9 @@
           "roasting": "Roasting",
           "safety_cooling": "Safety cooling",
           "searing": "Searing",
+          "second_espresso": "2nd espresso coffee",
+          "second_grinding": "2nd grinding",
+          "second_pre_brewing": "2nd pre-brewing",
           "slightly_dry": "Slightly dry",
           "slow_roasting": "Slow roasting",
           "smoothing": "Smoothing",
@@ -2059,10 +2068,7 @@
           "warm_air": "Warm air",
           "warm_cups_glasses": "Warm cups/glasses",
           "warm_dishes_plates": "Warm dishes/plates",
-          "wheel_lifted": "Wheel lifted",
-          "second_espresso": "2nd espresso coffee",
-          "second_grinding": "2nd grinding",
-          "second_pre_brewing": "2nd pre-brewing"
+          "wheel_lifted": "Wheel lifted"
         }
       },
       "program_type_raw": {
