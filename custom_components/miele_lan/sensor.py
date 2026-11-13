@@ -22,8 +22,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     REVOLUTIONS_PER_MINUTE,
     EntityCategory,
+    UnitOfEnergy,
     UnitOfTemperature,
     UnitOfTime,
+    UnitOfVolume,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -945,6 +947,34 @@ DEVICE_CONTEXT_SENSORS: tuple[MieleLanDeviceContextSensorDef, ...] = (
             entity_category=EntityCategory.DIAGNOSTIC,
             container_index=None,
             value_fn=lambda ctx: _consumable_percent(ctx, "rinse_aid_percent"),
+        ),
+    ),
+    MieleLanDeviceContextSensorDef(
+        types=DISHWASHER_FAMILY,
+        description=MieleLanDeviceContextSensorDescription(
+            key="lifetime_energy",
+            translation_key="lifetime_energy",
+            native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+            suggested_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+            suggested_display_precision=1,
+            device_class=SensorDeviceClass.ENERGY,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            container_index=None,
+            value_fn=lambda ctx: ctx.get("lifetime_energy_wh"),
+        ),
+    ),
+    MieleLanDeviceContextSensorDef(
+        types=DISHWASHER_FAMILY,
+        description=MieleLanDeviceContextSensorDescription(
+            key="lifetime_water",
+            translation_key="lifetime_water",
+            native_unit_of_measurement=UnitOfVolume.LITERS,
+            device_class=SensorDeviceClass.WATER,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            container_index=None,
+            value_fn=lambda ctx: ctx.get("lifetime_water_l"),
         ),
     ),
 )
