@@ -22,7 +22,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, LIGHTABLE_FAMILY, MieleAppliance
-from .coordinator import MieleLanCoordinator
+from .coordinator import MieleLanCoordinator, model_name
 from .entity import MieleLanEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ _NO_LIGHT_STATE_MODELS = frozenset({"H6800BMX"})
 
 
 def _light_is_dead(data: Any) -> bool:
-    model = "".join(str(data.ident.get("tech_type") or "").upper().split())
+    model = model_name(data.ident)
     return model in _NO_LIGHT_STATE_MODELS and data.state.get("Light") == 0
 
 
