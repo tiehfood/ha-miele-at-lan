@@ -24,6 +24,7 @@ import struct
 from typing import Any
 
 import aiohttp
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from homeassistant.exceptions import HomeAssistantError
 
@@ -371,6 +372,25 @@ def parse_dop1_setting_pf_value(response_hex: str, pf_id: int) -> int | None:
     return None
 
 
+def _decrypt_body(raw: bytes, signature: bytes, group_key: bytes, resource: str) -> bytes:
+    """Decrypt a response and drop its 0x20 padding.
+
+    asyncmiele strips every trailing 0x20, which also eats the end of a
+    binary DOP2 leaf whose last byte is 32. A DOP2 leaf declares its length
+    (excluding the 2-byte length field), so it is cut there instead; JSON
+    bodies, DOP2 error bodies included, keep the plain strip.
+    """
+    key = group_key[: len(group_key) // 2]
+    iv = signature[: len(signature) // 2]
+    decryptor = Cipher(algorithms.AES(key), modes.CBC(iv)).decryptor()
+    plain = decryptor.update(raw) + decryptor.finalize()
+    if "/DOP2/" in resource and len(plain) >= 2:
+        end = int.from_bytes(plain[:2], "big") + 2
+        if end <= len(plain):
+            return plain[:end]
+    return plain.rstrip(b"\x20")
+
+
 async def _patched_request_bytes(
     self: MieleClient,
     method: str,
@@ -456,7 +476,7 @@ async def _patched_request_bytes(
             if len(sig_hex) % 2:
                 sig_hex = "0" + sig_hex
             sig_bytes = binascii.a2b_hex(sig_hex)
-            return status, _crypto.decrypt_response(raw, sig_bytes, self.group_key)
+            return status, _decrypt_body(raw, sig_bytes, self.group_key, resource)
     except asyncio.TimeoutError as exc:
         raise NetworkTimeoutError(str(exc)) from exc
     except aiohttp.ClientError as exc:
