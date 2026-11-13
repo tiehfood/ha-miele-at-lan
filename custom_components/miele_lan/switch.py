@@ -42,6 +42,19 @@ from .coordinator import MieleLanCoordinator
 from .entity import MieleLanEntity
 
 
+# Off as in the app's SwitchOnAction.IsApplianceOnObservable: Status 1 (off),
+# 8 (failure) and 255 (not connected). Status 0 only shows up in the all-zero
+# /State some appliances serve on the way to standby, so it says nothing.
+_POWER_OFF_STATUSES = frozenset({1, 8, 255})
+
+
+def _power_is_on(state: dict[str, Any]) -> bool | None:
+    status = state.get("Status")
+    if not isinstance(status, int) or status == 0:
+        return None
+    return status not in _POWER_OFF_STATUSES
+
+
 @dataclass(frozen=True, kw_only=True)
 class MieleLanSwitchDescription(SwitchEntityDescription):
     is_on_fn: Callable[[dict[str, Any]], bool | None]
@@ -63,7 +76,7 @@ SWITCH_TYPES: tuple[MieleLanSwitchDef, ...] = (
             key="power",
             translation_key="power_switch",
             device_class=SwitchDeviceClass.SWITCH,
-            is_on_fn=lambda s: (s.get("Status") is not None and s["Status"] != 1),
+            is_on_fn=_power_is_on,
             turn_on_fn=lambda c: c.set_power(True),
             turn_off_fn=lambda c: c.set_power(False),
         ),
