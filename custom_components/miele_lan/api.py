@@ -767,6 +767,15 @@ class MieleLanClient:
             f"/Devices/{self._route}/DOP2/"
             f"{USER_REQUEST_UNIT}/{USER_REQUEST_LEAF}?idx1=0&idx2=0"
         )
+        await self._put_dop2(resource, payload)
+
+    async def _put_dop2(self, resource: str, payload: bytes) -> None:
+        """PUT a DOP2 write and map refusals to readable errors.
+
+        A 404 means the firmware blocks DOP2 writes altogether, a 403 that
+        remote control is off, a 500 that the appliance can't carry the
+        command out in its current state.
+        """
         try:
             await self._client._request_bytes(
                 "PUT", resource, body=payload, allowed_status=(200, 204)
