@@ -269,6 +269,26 @@ def _lifetime_total(
     return None
 
 
+def parse_program_list(payload: bytes) -> list[int]:
+    """DOP2 2/1584 — GLOBAL_ProgramList: the programme ids the appliance offers.
+
+    Field 1 ValidElements counts the used slots of field 2 ProgramIds (AU16);
+    the rest of the array is zero padding. Verified on a G7655 (12 of 15
+    slots, #61). Returns [] for anything that is not a 2/1584 read.
+    """
+    if len(payload) < 12:
+        return []
+    unit, leaf = struct.unpack_from(">HH", payload, 2)
+    if (unit, leaf) != (2, 1584):
+        return []
+    root, _ = _walk_fields(payload, 12, struct.unpack_from(">H", payload, 10)[0])
+    valid = root.get(1, (None, None))[1]
+    ids = root.get(2, (None, None))[1]
+    if not isinstance(valid, int) or not isinstance(ids, list):
+        return []
+    return [i for i in ids[:valid] if isinstance(i, int) and i > 0]
+
+
 def parse_global_device_context(payload: bytes) -> dict[str, Any]:
     """DOP2 2/1585 — GLOBAL_DeviceContext.
 

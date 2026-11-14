@@ -32,10 +32,11 @@ from .const import (
     OVEN_FAMILY,
     PF_DA_FETTFILTER_GRENZE_AKTUELL,
     PF_DA_KOHLEFILTER_GRENZE_AKTUELL,
+    PROGRAM_LIST_LEAF,
     MieleAppliance,
     is_idle_state,
 )
-from .dop2 import parse_global_device_context, parse_hours_of_operation
+from .dop2 import parse_global_device_context, parse_hours_of_operation, parse_program_list
 from .enrollment import EnrolledDevice
 from .polling import POLL_FALLBACK_INTERVAL, PUSH_STALE_AFTER, decide_poll_interval
 from .push_listener import PushEvent
@@ -62,6 +63,7 @@ IDENT_SETUP_RETRY_ATTEMPTS = 3  # bounded retries given to /Ident before platfor
                                 # setup forwards entities — see async_ensure_ident_ready.
 IDENT_SETUP_RETRY_DELAY = 1.0  # seconds between those retries.
 POLL_FAILURE_TOLERANCE = 2  # consecutive failed polls tolerated before UpdateFailed
+PROGRAM_LIST_MAX_MISSES = 3  # 2/1584 reads without a list before giving up
 
 
 def model_name(ident: dict[str, Any]) -> str:
@@ -92,6 +94,8 @@ class MieleLanData:
     # 2/1585 DoorState read during the latest poll, None if that poll did not
     # read it — a value from before the appliance fell asleep must not linger.
     door_state: int | None = None
+    # Programme ids from DOP2 2/1584, read once; None until then.
+    program_list: list[int] | None = None
 
 
 class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
@@ -133,6 +137,8 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         self._device_context_unsupported: bool = False
         self._device_context_miss_cycles: int = 0
         self._device_context_answered = False
+        self._device_context_fresh = False
+        self._program_list_misses = 0
         self._hood_filters_last_fetch: float = float("-inf")
         self._hood_filters_unsupported: bool = False
         self._last_push_at: float | None = None
@@ -339,6 +345,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
             await self._maybe_refresh_wlan()
             await self._maybe_refresh_hours_of_operation()
             await self._maybe_refresh_device_context()
+            await self._maybe_fetch_program_list()
             await self._maybe_refresh_hood_filters()
         except Exception as err:  # noqa: BLE001
             self._consecutive_poll_failures += 1
@@ -478,6 +485,7 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
           (entities go `unknown`) instead of frozen stale levels.
         """
         self._data.door_state = None
+        self._device_context_fresh = False
         if self._device_context_unsupported:
             return
         if self.device_type not in (*LAUNDRY_FAMILY, *DISHWASHER_FAMILY):
@@ -602,12 +610,51 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
 
     def _store_device_context(self, body: bytes) -> None:
         self._device_context_answered = True
+        self._device_context_fresh = True
         try:
             self._data.device_context = parse_global_device_context(body)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("[%s] DOP2 2/1585 parse failed: %s", self.fab, err)
             return
         self._data.door_state = self._data.device_context.get("door_state")
+
+    async def _maybe_fetch_program_list(self) -> None:
+        """Read the dishwasher's programme list (DOP2 2/1584) once per HA run.
+
+        Only in a poll where 2/1585 just answered 200: the appliance is awake
+        and serves unit 2 leaves above 1000. EK037 firmware times out on
+        those and a timeout stalls its whole HTTP server (#15), so a unit
+        that never answered 2/1585 is never probed. Gives up after
+        PROGRAM_LIST_MAX_MISSES reads without a usable list.
+        """
+        if (
+            self.device_type not in DISHWASHER_FAMILY
+            or not self._device_context_fresh
+            or self._data.program_list is not None
+            or self._program_list_misses >= PROGRAM_LIST_MAX_MISSES
+        ):
+            return
+        try:
+            st, body = await self.client.raw._request_bytes(
+                "GET",
+                f"/Devices/{self.fab}/DOP2/2/{PROGRAM_LIST_LEAF}?idx1=0&idx2=0",
+                allowed_status=(200, 403, 404, 500),
+            )
+        except Exception as err:  # noqa: BLE001
+            self._program_list_misses += 1
+            _LOGGER.debug("[%s] DOP2 2/1584 read failed: %s", self.fab, err)
+            return
+        ids = parse_program_list(body) if st == 200 else []
+        if not ids:
+            self._program_list_misses += 1
+            if st in (403, 404):
+                self._program_list_misses = PROGRAM_LIST_MAX_MISSES
+            _LOGGER.debug(
+                "[%s] DOP2 2/1584 gave no programme list (HTTP %d, %d bytes)",
+                self.fab, st, len(body),
+            )
+            return
+        self._data.program_list = ids
 
     async def _maybe_refresh_hood_filters(self) -> None:
         """Read the hood's grease/charcoal filter saturation grades.

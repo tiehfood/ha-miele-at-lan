@@ -808,6 +808,39 @@ class MieleLanClient:
         except NetworkConnectionError as exc:
             raise HomeAssistantError("Could not connect to the appliance.") from exc
 
+    async def select_program(self, program_id: int) -> None:
+        """Select a programme via DOP2 2/1577 without starting it.
+
+        Read-modify-write of GLOBAL_PS_Select (`build_program_select_payload`).
+        Verified on a G7655: Eco to Intensive, 204, read-back identical to
+        the write, panel showing Intensive programmed (#61).
+        """
+        resource = (
+            f"/Devices/{self._route}/DOP2/"
+            f"{PROGRAM_SELECT_UNIT}/{PROGRAM_SELECT_LEAF}?idx1=0&idx2=0"
+        )
+        try:
+            _, current = await self._client._request_bytes(
+                "GET", resource, allowed_status=(200,)
+            )
+        except ResponseError as exc:
+            raise HomeAssistantError(
+                f"Reading the current programme selection failed (HTTP {exc.status_code})."
+            ) from exc
+        except NetworkTimeoutError as exc:
+            raise HomeAssistantError(
+                "The appliance did not respond to the command (timeout)."
+            ) from exc
+        except NetworkConnectionError as exc:
+            raise HomeAssistantError("Could not connect to the appliance.") from exc
+        try:
+            payload = build_program_select_payload(current, program_id)
+        except ValueError as exc:
+            raise HomeAssistantError(
+                f"Unexpected programme selection data from the appliance ({exc})."
+            ) from exc
+        await self._put_dop2(resource, payload)
+
     # --- light / power convenience ------------------------------------------
 
     async def stop_program(self) -> None:

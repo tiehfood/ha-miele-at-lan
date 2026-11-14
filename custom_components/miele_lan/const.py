@@ -78,6 +78,7 @@ PROCESS_ACTION_PAUSE = 3
 # DeviceStateExtensions): Stop needs Status in {waiting_to_start, in_use};
 # Start needs Status == waiting_to_start, or Status == programmed with
 # mobile start on and no delayed start queued.
+STATUS_ON = 2
 STATUS_PROGRAMMED = 3
 STATUS_WAITING_TO_START = 4
 STATUS_IN_USE = 5
@@ -91,6 +92,8 @@ USER_REQUEST_LEAF = 1583
 # DOP2 GLOBAL_PS_Select leaf — programme selection (#61).
 PROGRAM_SELECT_UNIT = 2
 PROGRAM_SELECT_LEAF = 1577
+# DOP2 GLOBAL_ProgramList leaf — the programmes the appliance offers.
+PROGRAM_LIST_LEAF = 1584
 
 # Opcode → label.  Sourced from MieleDop2Structures.UserRequestOven (akappner/MieleRESTServer)
 # and confirmed working on the H7560BP oven via DOP2 writes (light, switch on/off). Not

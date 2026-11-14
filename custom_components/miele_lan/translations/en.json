@@ -2280,6 +2280,29 @@
           "5_min": "5 minutes",
           "15_min": "15 minutes"
         }
+      },
+      "program": {
+        "name": "Programme",
+        "state": {
+          "automatic": "Automatic",
+          "comfort_wash": "Comfort wash",
+          "comfort_wash_plus": "Comfort wash plus",
+          "eco": "ECO",
+          "extra_quiet": "Extra quiet",
+          "gentle": "Gentle",
+          "glasses_warm": "Glasses warm",
+          "hygiene": "Hygiene",
+          "intensive": "Intensive",
+          "maintenance": "Maintenance program",
+          "no_program": "No program",
+          "normal": "Normal",
+          "pasta_paela": "Pasta/paella",
+          "power_wash": "PowerWash",
+          "quick_power_wash": "QuickPowerWash",
+          "rinse_salt": "Rinse salt",
+          "solar_save": "SolarSave",
+          "tall_items": "Tall items"
+        }
       }
     }
   },
