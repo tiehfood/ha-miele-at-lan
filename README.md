@@ -35,7 +35,7 @@ Local Home Assistant integration for Miele@home appliances — ovens, hobs, dish
 |---|---|---|---|
 | **Oven** (incl. steam, combi, microwave) | H7560BP, H7164BP, DGC7860HCXL, DGM7440, … | status, program, phase, remaining/elapsed/start time, progress, finish time, cavity & core temps, target & core-target, door, signals, light | stop, wake, power, light |
 | **Hob** | KM7576, KM7895 FL induction, induction + extractor | per-zone power (1..12 incl. ½ steps, boost/boost+, keep-warm), per-zone residual heat, per-zone timer, status | — |
-| **Dishwasher** | G7000-series + semi-pro/professional | status, program, phase, remaining/elapsed time, progress, finish time, door, signals, AutoDos PowerDisk level, salt & rinse aid levels, lifetime energy & water consumption† | start / stop / pause / resume, wake, power |
+| **Dishwasher** | G7000-series + semi-pro/professional | status, program, phase, remaining/elapsed time, progress, finish time, door, signals, AutoDos PowerDisk level, salt & rinse aid levels, lifetime energy & water consumption† | start / stop / pause / resume, wake, power, programme select‡ |
 | **Washer / dryer / washer-dryer** | WWG/TWC/WWV/WTV series | status, program, phase, drying step, remaining/elapsed/start time, progress, finish time, door, signals | start / stop, wake |
 | **Fridge / freezer / fridge-freezer** | KF 7772 B, K 7000, KFN, KFNS, … | per-zone current + target temp, per-zone door, SuperCool, SuperFreeze, failure | — *(see Limitations)* |
 | **Wine cabinet** | KWT 6000, KWNS, KWTUS, wine + freezer | per-zone temp, per-zone door, light state | — *(see Limitations)* |
@@ -122,6 +122,8 @@ Same flow works in Firefox (DevTools → Network → look for the blocked `miele
 - **mDNS is required.** Discovery, fab→IP resolution, and SuperVision push delivery all rely on `_mieleathome._tcp.local.` traffic flowing between HA and the appliances. HA and the appliances must share a broadcast domain (same VLAN, no Docker bridge in between, no IoT-VLAN isolation).
 
 † *Dishwasher consumable levels (AutoDos, salt, rinse aid) come from DOP2 leaf `2/1585` and are only exposed where the appliance's firmware surfaces that leaf — verified on a G7655 (XKM EK057S, FW 09.14, protocolVersion 4) against the Miele cloud API's values for the same machine. Lifetime energy / water consumption come from the same leaf (eco-feedback totals; the appliance's own counter — cross-checked against the Miele app's usage pages, which track it within a few percent). If the appliance is in deep standby when HA (or the integration) loads, these entities appear on their own as soon as `2/1585` first answers. Once the leaf works, a later latch (3 poll cycles without a 200, or a 403/404) clears the cached context, so the entities go `unknown` rather than showing stale levels. The appliance must be awake at some point for the values to populate: dishwashers are woken and retried, bounded to a few poll cycles; washers and dryers are never woken for this read, so their values arrive the next time they are switched on.*
+
+‡ *The programme select offers the programmes the dishwasher lists in DOP2 leaf `2/1584` and selects one through `2/1577` without starting it. Verified on a G7655 (XKM EK057S, FW 09.14). The list is read once, the first time `2/1585` answers, so the entity appears on dishwashers that serve those leaves. A programme can only be selected while the dishwasher is on and not running; Start stays a separate button.*
 
 ## Troubleshooting
 
