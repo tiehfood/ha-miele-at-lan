@@ -1081,8 +1081,9 @@
         "name": "Push-Status",
         "state": {
           "push_active": "Push aktiv",
-          "push_inactive": "Nur Polling",
-          "push_offline": "Offline"
+          "push_ready": "Push bereit, noch kein Update",
+          "subs_ready": "Einfacher Push, noch kein Update",
+          "polling": "Nur Polling"
         }
       },
       "drying_step": {

@@ -1560,13 +1560,16 @@ class MieleLanPushStateSensor(MieleLanEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_translation_key = "push_mode"
     _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.ENUM
+    # coordinator.push_mode values with ":" replaced, which state keys can't hold.
+    _attr_options = ["push_active", "push_ready", "subs_ready", "polling"]
 
     def __init__(self, coordinator: MieleLanCoordinator) -> None:
         super().__init__(coordinator, "push_mode")
 
     @property
     def native_value(self) -> str:
-        return self.coordinator.push_mode
+        return self.coordinator.push_mode.replace(":", "_")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
