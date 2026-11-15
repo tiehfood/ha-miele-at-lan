@@ -434,7 +434,7 @@ python -m pytest tests/
 
 `tools/` contains two helpers that run from a repository checkout with the packages above installed:
 
-- `tools/miele_lan_provision.py` sets up a factory-fresh appliance without the Miele app. It has the subcommands `wifi`, `commission`, `pair` and `verify`; run it with `--help` for the options. Pass `--out` (or `--keys` for `verify`) with a path of your own to choose where the keys are saved.
+- `tools/miele_lan_provision.py` sets up a factory-fresh appliance without the Miele app. It has the subcommands `wifi`, `commission`, `pair` and `verify`; run it with `--help` for the options. The keys are saved to `keys.yaml` in the repository root, which git ignores; pass `--out` (or `--keys` for `verify`) to use another file.
 - `tools/dump_map_countries.py --check` compares the supported country list with Miele's service.
 
 > **Warning:** the appliance does not check commissioning data. If it receives an empty or wrong key, it can lock itself to that key, and the real key is then refused. The only way back is on the appliance: settings menu > **Miele@home** > reset, then reconnect it in the Miele app. Use `tools/miele_lan_provision.py`, which checks key lengths before sending. Do not send keys by hand with `curl` or a script.
