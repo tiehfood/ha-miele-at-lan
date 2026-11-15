@@ -15,7 +15,7 @@
   "requirements": [
     "asyncmiele==0.2.6"
   ],
-  "version": "1.24.0",
+  "version": "1.24.1",
   "zeroconf": [
     {
       "type": "_mieleathome._tcp.local."
