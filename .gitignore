@@ -45,6 +45,7 @@ scratch/
 *.pcap
 *.pcapng
 keys.json
+keys.yaml
 
 ### IntelliJ IDEA ###
 out/

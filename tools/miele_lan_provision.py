@@ -13,8 +13,8 @@ normally drives:
   5. (optional) POST /Subscriptions  — register an HA callback URL while we
      still have elevated rights. Skipped if --no-subscribe.
   6. Verify by signing `GET /Devices` with the new keys (asyncmiele path).
-  7. Emit a paste-into-HA setup blob (base64 JSON) and a .claude/research/keys.yaml
-     append-block.
+  7. Emit a paste-into-HA setup blob (base64 JSON) and save the keys to a keys.yaml
+     file (default: keys.yaml in the repository root, which git ignores).
 
 Steps 2 and 4 use *unauthenticated* HTTPS/HTTP PUTs — same as MieleRESTServer's
 `provision-wifi.sh` and `provision-key.sh`. We try HTTP first, then HTTPS with
@@ -31,7 +31,6 @@ Run examples:
 Authoritative protocol references:
   - akappner/MieleRESTServer helpers/{provision-wifi.sh, provision-key.sh}
   - droman42/asyncmiele utils/provisioning.py (MieleSetupClient flow)
-  - Live RE notes in .claude/ARCHITECTURE.md and memory/twin_device_feasibility.md
 """
 from __future__ import annotations
 
@@ -604,7 +603,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pc = sub.add_parser("commission", help="Push GroupID/GroupKey to a provisioned-but-unkeyed device.")
     pc.add_argument("--device", required=True, help="Appliance IP on the home WiFi (post-WiFi step)")
-    pc.add_argument("--out", default=".claude/research/keys.yaml", help="Where to save the new keys")
+    pc.add_argument("--out", default="keys.yaml", help="Where to save the new keys (default %(default)s)")
     pc.add_argument("--endpoint", default="oven", help="Endpoint name to use in keys.yaml")
     pc.add_argument("--no-verify", action="store_true", help="Skip the post-commission signed verify")
     pc.add_argument("--group-id", help="Use this GroupID (16 hex chars) instead of generating one")
@@ -639,7 +638,7 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--ssid", required=True, help="Home WiFi SSID to push")
     pp.add_argument("--psk", required=True, help="Home WiFi PSK to push")
     pp.add_argument("--sec", default="WPA2", choices=("WPA", "WPA2", "WPA3", "None"))
-    pp.add_argument("--out", default=".claude/research/keys.yaml")
+    pp.add_argument("--out", default="keys.yaml")
     pp.add_argument("--endpoint", default="oven",
                     help="Endpoint name in keys.yaml (e.g. hob, dryer, fridge)")
     pp.add_argument("--group-id", help="Use this GroupID (16 hex chars) instead of generating one")
@@ -648,7 +647,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pv = sub.add_parser("verify", help="Verify stored keys against a live device.")
     pv.add_argument("--device", help="(unused — kept for symmetry)")
-    pv.add_argument("--keys", default=".claude/research/keys.yaml")
+    pv.add_argument("--keys", default="keys.yaml")
     pv.add_argument("--endpoint", default="oven")
     pv.set_defaults(func=cmd_verify)
     return p
