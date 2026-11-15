@@ -2,7 +2,7 @@
 
 A dishwasher in deep standby serves an all-zero /State block, including
 StandbyState: 0. The decompiled GLOBAL_EnumDeviceStateStandbyState enum
-(.claude/memory/standby_state_enum.md) documents 0 as UNKNOWN, not "device is
+documents 0 as UNKNOWN, not "device is
 awake" — rendering it as not_in_standby was a confident false claim.
 custom_components depends on homeassistant being importable in this venv,
 same reasoning as test_minutes.py.
