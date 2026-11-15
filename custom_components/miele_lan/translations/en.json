@@ -2334,6 +2334,20 @@
         }
       }
     },
+    "dump_rest_resource": {
+      "name": "Dump REST resource",
+      "description": "Reads one plain REST resource (Ident, State or the State ExtendedState blob) from an appliance and returns it as text and hex. Read-only — never writes anything to the appliance. Useful for appliances that don't answer DOP2 reads, when reporting data in a GitHub issue.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The Miele@LAN device to read from."
+        },
+        "resource": {
+          "name": "Resource",
+          "description": "Which resource to read: Ident, State, or State.ExtendedState."
+        }
+      }
+    },
     "select_program": {
       "name": "Select programme (experimental)",
       "description": "Selects a programme by writing DOP2 leaf 2/1577, the way the Miele app does. Does not start it. Experimental: returns the HTTP status and the leaf before and after, for reporting in GitHub issue #61.",

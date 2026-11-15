@@ -2334,6 +2334,20 @@
         }
       }
     },
+    "dump_rest_resource": {
+      "name": "REST-Ressource auslesen",
+      "description": "Liest eine einfache REST-Ressource (Ident, State oder den ExtendedState-Block aus State) von einem Gerät aus und gibt sie als Text und Hex zurück. Rein lesend — schreibt niemals etwas auf das Gerät. Nützlich für Geräte, die keine DOP2-Abfragen beantworten, um Daten in einem GitHub-Issue zu melden.",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Das Miele@LAN-Gerät, von dem du lesen möchtest."
+        },
+        "resource": {
+          "name": "Ressource",
+          "description": "Welche Ressource gelesen wird: Ident, State oder State.ExtendedState."
+        }
+      }
+    },
     "select_program": {
       "name": "Programm auswählen (experimentell)",
       "description": "Wählt ein Programm über das DOP2-Blatt 2/1577 aus, wie die Miele-App. Startet es nicht. Experimentell: gibt den HTTP-Status und das Blatt vorher und nachher zurück, zum Melden in GitHub-Issue #61.",
