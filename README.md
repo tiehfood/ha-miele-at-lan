@@ -369,10 +369,10 @@ If the appliance is in deep standby, Home Assistant wakes it and tries again, up
 
 | Value | Meaning |
 |---|---|
-| `push:active` | Push works. The appliance has sent updates. |
-| `push:ready` | Push is set up. No update has arrived yet. |
-| `subs:ready` | The appliance supports only the basic way of sending updates. This is normal for some models. No update has arrived yet. |
-| `polling` | No push. Home Assistant asks the appliance on a timer. |
+| **Push active** | Push works. The appliance has sent updates. |
+| **Push ready, no update yet** | Push is set up. No update has arrived yet. |
+| **Basic push, no update yet** | The appliance supports only the basic way of sending updates. This is normal for some models. No update has arrived yet. |
+| **Polling only** | No push. Home Assistant asks the appliance on a timer. |
 
 If push never arrives, the appliances may not be able to reach Home Assistant. They connect on **TCP port 18082**, so a firewall on the Home Assistant host must let incoming connections on that port through. Behind a reverse proxy or in an isolated network, set the **Advertise address** under [Configure](#optional-configure) and forward port 18082 to Home Assistant.
 
