@@ -5,6 +5,7 @@ Laundry GetProgress (WMV960.cs:7851) and the oven ProgressSource: elapsed /
 start + remaining, as the laundry EndTime (WMV960.cs:5177).
 """
 import datetime as dt
+from types import SimpleNamespace
 
 import pytest
 
@@ -65,3 +66,51 @@ def test_finish_time_includes_the_delayed_start() -> None:
 )
 def test_no_finish_time(state: dict) -> None:
     assert _desc("finish_time").value_fn(state) is None
+
+
+def _clock(monkeypatch, hh: int, mm: int, ss: int) -> None:
+    now = dt.datetime(2026, 11, 16, hh, mm, ss, tzinfo=dt.timezone.utc)
+    monkeypatch.setattr(sensor_mod, "_utcnow", lambda: now)
+
+
+def _finish_entity(state: dict):
+    coord = SimpleNamespace(client=SimpleNamespace(route="dish"), data=SimpleNamespace(state=state))
+    return sensor_mod.MieleLanFinishTimeSensor(coord, _desc("finish_time")), coord
+
+
+def _at(hh: int, mm: int) -> dt.datetime:
+    return dt.datetime(2026, 11, 16, hh, mm, tzinfo=dt.timezone.utc)
+
+
+def test_finish_time_holds_through_the_minute_wobble(monkeypatch) -> None:
+    """The G7310 timeline from #76: the raw value alternates 18:45 and 18:46."""
+    entity, coord = _finish_entity({})
+    seen = []
+    for (hh, mm, ss), remaining in [
+        ((17, 21, 37), 84), ((17, 22, 7), 84), ((17, 22, 57), 83),
+        ((17, 23, 7), 83), ((17, 24, 7), 82), ((17, 24, 50), 81),
+    ]:
+        _clock(monkeypatch, hh, mm, ss)
+        coord.data.state = {"Status": 5, "RemainingTime": [0, remaining], "StartTime": [0, 0]}
+        seen.append(entity.native_value)
+    assert seen == [_at(18, 45)] * 6
+
+
+def test_finish_time_follows_a_real_change(monkeypatch) -> None:
+    entity, coord = _finish_entity({"Status": 5, "RemainingTime": [0, 84]})
+    _clock(monkeypatch, 17, 21, 37)
+    assert entity.native_value == _at(18, 45)
+    coord.data.state = {"Status": 5, "RemainingTime": [0, 90]}
+    assert entity.native_value == _at(18, 51)
+
+
+def test_finish_time_starts_fresh_after_the_programme(monkeypatch) -> None:
+    entity, coord = _finish_entity({"Status": 5, "RemainingTime": [0, 84]})
+    _clock(monkeypatch, 17, 21, 37)
+    assert entity.native_value == _at(18, 45)
+    coord.data.state = {"Status": 1, "RemainingTime": [0, 0]}
+    assert entity.native_value is None
+    _clock(monkeypatch, 17, 22, 7)
+    coord.data.state = {"Status": 5, "RemainingTime": [0, 84]}
+    assert entity.native_value == _at(18, 46)
+
