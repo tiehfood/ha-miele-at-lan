@@ -107,3 +107,40 @@ def test_lifetime_value_fns() -> None:
     # Empty context (leaf absent / latched off) → None, not an error.
     assert energy.value_fn({}) is None
     assert water.value_fn({}) is None
+
+# --------------------------------------------------------------- laundry
+# WEJ885 WCS washer (EK057S, FW 09.14) and TEL785WP dryer (FW 04.05),
+# both read on and idle on 2026-11-20. Their /State has no ExtendedState
+# (404), so 2/1585 is the only local source of their totals.
+#
+# Washer: attr 5 = 114805 IntType 46, attr 6 = 9052 IntType 44 (attrs 3/4,
+# 375 IntType 46 and 52 L, are the last cycle). The Miele app's last 12
+# months (Nov 2025 - Oct 2026) were 102.4 kWh, 8129 L and 171 cycles:
+# lifetime / 12 months is 1.121 for energy and 1.114 for water, so the two
+# counters move together and IntType 46 is Wh, not kWh.
+#
+# Dryer: attr 5 = 59868 with IntType 0 (untagged). It fits Wh (app: 51.4
+# kWh over 12 months) but nothing in the payload says so, so it stays
+# unread.
+W1 = Path(__file__).parent / "fixtures" / "wej885_dop2_1585.hex"
+D1 = Path(__file__).parent / "fixtures" / "tel785wp_dop2_1585.hex"
+
+
+def test_wej885_washer_lifetime_totals() -> None:
+    ctx = _ctx(bytes.fromhex(W1.read_text().strip()))
+    assert ctx["lifetime_energy_wh"] == 114805
+    assert ctx["lifetime_water_l"] == 9052
+
+
+def test_tel785wp_dryer_untagged_energy_is_not_read() -> None:
+    ctx = _ctx(bytes.fromhex(D1.read_text().strip()))
+    assert ctx["lifetime_energy_wh"] is None
+    assert ctx["lifetime_water_l"] is None
+
+
+def test_lifetime_sensors_cover_washers_but_not_dryers() -> None:
+    for key in ("lifetime_energy", "lifetime_water"):
+        [d] = [d for d in DEVICE_CONTEXT_SENSORS if d.description.key == key]
+        assert MieleAppliance.WASHING_MACHINE in d.types
+        assert MieleAppliance.TUMBLE_DRYER not in d.types
+        assert MieleAppliance.WASHER_DRYER not in d.types
