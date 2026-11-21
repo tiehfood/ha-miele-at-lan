@@ -22,6 +22,7 @@ from .const import (
     DOORED_FAMILY,
     HOB_FAMILY,
     LAUNDRY_FAMILY,
+    STATUS_OFF,
     WINE_FAMILY,
     MieleAppliance,
 )
@@ -38,8 +39,13 @@ DOOR_STATE_OPEN = 1  # GLOBAL_EnumDoorState
 
 def _door_open(data: MieleLanData) -> bool:
     # Some dishwashers (G7197) never set SignalDoor over the LAN; their
-    # DOP2 2/1585 DoorState does follow the door (issue #59).
-    return bool(data.state.get("SignalDoor")) or data.door_state == DOOR_STATE_OPEN
+    # DOP2 2/1585 DoorState does follow the door (issue #59). On a G7650
+    # it only follows the door while the machine is on: switched off, it
+    # keeps the value it had when it was switched off, usually "open"
+    # because the door was open to unload. So it only counts while on.
+    if data.state.get("SignalDoor"):
+        return True
+    return data.state.get("Status") != STATUS_OFF and data.door_state == DOOR_STATE_OPEN
 
 
 @dataclass(frozen=True, kw_only=True)
