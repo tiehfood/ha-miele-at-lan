@@ -259,6 +259,14 @@ LAUNDRY_FAMILY: tuple[MieleAppliance, ...] = (
     MieleAppliance.WASHER_DRYER,
 )
 
+# Washing machines only (no dryers or washer-dryers): what the 2/1585
+# lifetime energy and water sensors are verified for in the laundry family.
+WASHER_TYPES: tuple[MieleAppliance, ...] = (
+    MieleAppliance.WASHING_MACHINE,
+    MieleAppliance.WASHING_MACHINE_SEMI_PROFESSIONAL,
+    MieleAppliance.WASHING_MACHINE_PROFESSIONAL,
+)
+
 DISHWASHER_FAMILY: tuple[MieleAppliance, ...] = (
     MieleAppliance.DISHWASHER,
     MieleAppliance.DISHWASHER_SEMI_PROFESSIONAL,

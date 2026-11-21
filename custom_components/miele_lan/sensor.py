@@ -59,6 +59,7 @@ from .const import (
     STATUS_IN_USE,
     STATUS_PAUSE,
     STATUS_PROGRAM_ENDED,
+    WASHER_TYPES,
     WINE_FAMILY,
     MieleAppliance,
     is_idle_state,
@@ -1118,7 +1119,7 @@ DEVICE_CONTEXT_SENSORS: tuple[MieleLanDeviceContextSensorDef, ...] = (
         ),
     ),
     MieleLanDeviceContextSensorDef(
-        types=DISHWASHER_FAMILY,
+        types=(*DISHWASHER_FAMILY, *WASHER_TYPES),
         description=MieleLanDeviceContextSensorDescription(
             key="lifetime_energy",
             translation_key="lifetime_energy",
@@ -1133,7 +1134,7 @@ DEVICE_CONTEXT_SENSORS: tuple[MieleLanDeviceContextSensorDef, ...] = (
         ),
     ),
     MieleLanDeviceContextSensorDef(
-        types=DISHWASHER_FAMILY,
+        types=(*DISHWASHER_FAMILY, *WASHER_TYPES),
         description=MieleLanDeviceContextSensorDescription(
             key="lifetime_water",
             translation_key="lifetime_water",
