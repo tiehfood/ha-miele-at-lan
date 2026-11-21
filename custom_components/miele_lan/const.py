@@ -78,6 +78,7 @@ PROCESS_ACTION_PAUSE = 3
 # DeviceStateExtensions): Stop needs Status in {waiting_to_start, in_use};
 # Start needs Status == waiting_to_start, or Status == programmed with
 # mobile start on and no delayed start queued.
+STATUS_OFF = 1
 STATUS_ON = 2
 STATUS_PROGRAMMED = 3
 STATUS_WAITING_TO_START = 4

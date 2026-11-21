@@ -31,6 +31,12 @@ def _fixture(name: str) -> bytes:
 
 DOOR_OPEN = _fixture("g7197_dop2_1585_door_open.hex")
 DOOR_CLOSED = _fixture("g7197_dop2_1585_door_closed.hex")
+# G7650 SCVi (EK057S, FW 09.14), SignalDoor false in every read:
+# off with the door shut (identical bytes off with the door open), on with
+# the door open, and running with the door shut.
+G7650_OFF = _fixture("g7650_dop2_1585_off_door_closed.hex")
+G7650_ON_OPEN = _fixture("g7650_dop2_1585_on_door_open.hex")
+G7650_RUNNING_CLOSED = _fixture("g7650_dop2_1585_running_door_closed.hex")
 
 
 # ------------------------------------------------------------------ parser
@@ -55,6 +61,33 @@ def test_door_closed_from_door_state() -> None:
 
 def test_signal_door_still_counts_without_door_state() -> None:
     data = MieleLanData(state={"SignalDoor": True})
+    assert _door_open(data) is True
+
+
+def test_g7650_door_state_reads() -> None:
+    assert parse_global_device_context(G7650_OFF)["door_state"] == 1
+    assert parse_global_device_context(G7650_ON_OPEN)["door_state"] == 1
+    assert parse_global_device_context(G7650_RUNNING_CLOSED)["door_state"] == 2
+
+
+def test_door_state_ignored_while_off() -> None:
+    """Off, 2/1585 still says open from when the machine was switched off."""
+    ctx = parse_global_device_context(G7650_OFF)
+    data = MieleLanData(state={"SignalDoor": False, "Status": 1}, door_state=ctx["door_state"])
+    assert _door_open(data) is False
+
+
+def test_door_state_counts_while_on() -> None:
+    ctx = parse_global_device_context(G7650_ON_OPEN)
+    data = MieleLanData(state={"SignalDoor": False, "Status": 2}, door_state=ctx["door_state"])
+    assert _door_open(data) is True
+    ctx = parse_global_device_context(G7650_RUNNING_CLOSED)
+    data = MieleLanData(state={"SignalDoor": False, "Status": 5}, door_state=ctx["door_state"])
+    assert _door_open(data) is False
+
+
+def test_signal_door_still_counts_while_off() -> None:
+    data = MieleLanData(state={"SignalDoor": True, "Status": 1}, door_state=2)
     assert _door_open(data) is True
 
 
