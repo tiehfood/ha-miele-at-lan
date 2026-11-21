@@ -496,6 +496,24 @@ H6800BMXProgramId: dict[int, str] = {
     15: 'browning',
 }
 
+# The H6860BP reports its own ProgramID numbers for the heating functions.
+# Values were read while the matching function was selected on the oven
+# panel. They clash with or are missing from the shared oven table (7 is
+# Auto roast, 9 is Grill, 10 is Full grill and 13 is Fan plus there), so
+# they apply to this model only.
+H6860BPProgramId: dict[int, str] = {
+    2: 'auto_roast',
+    3: 'browning_bake',
+    4: 'full_grill',
+    5: 'economy_grill',
+    7: 'fan_plus',
+    8: 'intensive_bake',
+    9: 'top_heat',
+    10: 'conventional_heat',
+    12: 'bottom_heat',
+    13: 'fan_grill',
+}
+
 ProgramPhaseMicrowaveOvenCombo: dict[int, str] = {
     0: 'not_running',
     3329: 'heating_up_phase',

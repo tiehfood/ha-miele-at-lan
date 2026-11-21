@@ -32,10 +32,30 @@ def test_h6800bmx_manual_functions(program_id, name):
     assert _name(program_id, "H6800BMX") == name
 
 
+# Read from a H6860BP while the matching function was selected on the panel.
+@pytest.mark.parametrize(
+    ("program_id", "name"),
+    [(2, "auto_roast"), (3, "browning_bake"), (4, "full_grill"), (5, "economy_grill"),
+     (7, "fan_plus"), (8, "intensive_bake"), (9, "top_heat"),
+     (10, "conventional_heat"), (12, "bottom_heat"), (13, "fan_grill")],
+)
+def test_h6860bp_heating_functions(program_id, name):
+    assert _name(program_id, "H6860BP") == name
+
+
 def test_other_models_keep_the_shared_table():
+    assert _name(2, "H7660BP") == "2"
+    assert _name(3, "H7660BP") == "3"
+    assert _name(4, "H7660BP") == "4"
+    assert _name(5, "H7660BP") == "5"
     assert _name(8, "H7660BP") == "8"
     assert _name(13, "H7660BP") == "fan_plus"
     assert _name(13, "H6800BMX") == "fan_plus"
+    assert _name(7, "H7660BP") == "auto_roast"
+    assert _name(7, "H6800BMX") == "auto_roast"
+    assert _name(9, "H7660BP") == "grill"
+    assert _name(10, "H7660BP") == "full_grill"
+    assert _name(12, "H7660BP") == "12"
 
 
 def test_names_are_translated():
@@ -46,3 +66,17 @@ def test_names_are_translated():
     )["entity"]["sensor"]["program_id"]["state"]
     for name in enums.H6800BMXProgramId.values():
         assert name in states
+
+
+def test_h6860bp_names_are_translated():
+    # Every name must exist as a translated state of the program sensors,
+    # otherwise the frontend shows the raw key.
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).parents[1] / "custom_components/miele_lan"
+    for file in ["strings.json", "translations/en.json", "translations/de.json"]:
+        sensors = json.loads((root / file).read_text(encoding="utf-8"))["entity"]["sensor"]
+        for key in ("program_id", "program_id_raw"):
+            missing = set(enums.H6860BPProgramId.values()) - set(sensors[key]["state"])
+            assert not missing, f"{file} {key}: {missing}"
