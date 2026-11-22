@@ -91,7 +91,7 @@ def test_h6860bp_names_are_translated():
     [(1, "fan_plus"), (2, "cake_special"), (3, "conventional_heat"), (4, "top_heat"),
      (5, "bottom_heat"), (6, "full_grill"), (7, "economy_grill"), (8, "fan_grill"),
      (9, "intensive_bake"), (13, "steam_cooking"), (17, "combined_cooking"),
-     (29, "sous_vide"), (61, "combi_cooking")],
+     (29, "sous_vide"), (61, "combi_steam")],
 )
 def test_dgc6860d_functions(program_id, name):
     assert _lookup_for_type(

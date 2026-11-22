@@ -539,7 +539,7 @@ DGC6860DProgramId: dict[int, str] = {
     13: 'steam_cooking',
     17: 'combined_cooking',
     29: 'sous_vide',
-    61: 'combi_cooking',
+    61: 'combi_steam',
 }
 
 ProgramPhaseMicrowaveOvenCombo: dict[int, str] = {

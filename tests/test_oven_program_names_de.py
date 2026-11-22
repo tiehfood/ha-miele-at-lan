@@ -18,7 +18,7 @@ DE = Path(__file__).parents[1] / "custom_components/miele_lan/translations/de.js
      ("economy_grill", "Grill klein"), ("combined_cooking", "Bräunungsgaren"),
      ("moisture_plus", "Klimagaren"), ("cake_special", "Kuchen spezial"),
      ("moisture_plus_fan_plus", "Klimagaren + Heißluft plus"),
-     ("combi_cooking", "Kombigaren")],
+     ("combi_steam", "Kombigaren")],
 )
 def test_german_oven_function_names(sensor, key, name):
     states = json.loads(DE.read_text(encoding="utf-8"))["entity"]["sensor"][sensor]["state"]
