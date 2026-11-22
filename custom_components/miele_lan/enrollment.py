@@ -764,16 +764,28 @@ async def mdns_discover_household(
 async def _signed_get_fabs(
     *, ip: str, group_id_hex: str, group_key_hex: str
 ) -> list[str]:
-    """Signed GET /Devices to learn the fab number(s) at this IP."""
-    try:
-        async with MieleLanClient.from_hex(
-            ip, group_id_hex, group_key_hex, "_probe_", timeout=6.0,
-        ) as client:
-            devices = await client.get_devices()
-            return [k for k in devices.keys() if k]
-    except Exception as err:
-        _LOGGER.debug("[%s] signed GET /Devices failed: %s", ip, err)
-        return []
+    """Signed GET /Devices to learn the fab number(s) at this IP.
+
+    An appliance in standby can take longer than a few seconds to answer the
+    first request (it has to wake its network module), so a single short
+    attempt reports "no devices" for a household whose key is fine. Try twice
+    with a generous timeout and keep the reason of the last failure visible.
+    """
+    err: Exception | None = None
+    for _attempt in range(2):
+        try:
+            async with MieleLanClient.from_hex(
+                ip, group_id_hex, group_key_hex, "_probe_", timeout=15.0,
+            ) as client:
+                devices = await client.get_devices()
+                return [k for k in devices.keys() if k]
+        except Exception as exc:  # noqa: BLE001
+            err = exc
+    _LOGGER.warning(
+        "[%s] signed GET /Devices failed: %s: %s",
+        ip, type(err).__name__, err,
+    )
+    return []
 
 
 __all__ = [
