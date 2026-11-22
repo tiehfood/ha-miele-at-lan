@@ -9,6 +9,7 @@ import pytest
 
 from custom_components.miele_lan import enums
 from custom_components.miele_lan.const import MieleAppliance
+from custom_components.miele_lan.coordinator import model_name
 from custom_components.miele_lan.sensor import (
     _MODEL_PROGRAM_ID,
     _PROGRAM_ID_BY_TYPE,
@@ -35,9 +36,10 @@ def test_h6800bmx_manual_functions(program_id, name):
 # Read from a H6860BP while the matching function was selected on the panel.
 @pytest.mark.parametrize(
     ("program_id", "name"),
-    [(2, "auto_roast"), (3, "browning_bake"), (4, "full_grill"), (5, "economy_grill"),
+    [(2, "auto_roast"), (3, "combined_cooking"), (4, "full_grill"), (5, "economy_grill"),
      (7, "fan_plus"), (8, "intensive_bake"), (9, "top_heat"),
-     (10, "conventional_heat"), (12, "bottom_heat"), (13, "fan_grill")],
+     (10, "conventional_heat"), (12, "bottom_heat"), (13, "fan_grill"),
+     (19, "moisture_plus")],
 )
 def test_h6860bp_heating_functions(program_id, name):
     assert _name(program_id, "H6860BP") == name
@@ -80,3 +82,27 @@ def test_h6860bp_names_are_translated():
         for key in ("program_id", "program_id_raw"):
             missing = set(enums.H6860BPProgramId.values()) - set(sensors[key]["state"])
             assert not missing, f"{file} {key}: {missing}"
+
+
+# Read from a DGC 6860 D steam combi oven while the matching function ran.
+# The TechType has spaces; the lookup key is the TechType without them.
+@pytest.mark.parametrize(
+    ("program_id", "name"),
+    [(1, "fan_plus"), (2, "cake_special"), (3, "conventional_heat"), (4, "top_heat"),
+     (5, "bottom_heat"), (6, "full_grill"), (7, "economy_grill"), (8, "fan_grill"),
+     (9, "intensive_bake"), (13, "steam_cooking"), (17, "combined_cooking"),
+     (29, "sous_vide"), (61, "combi_cooking")],
+)
+def test_dgc6860d_functions(program_id, name):
+    assert _lookup_for_type(
+        _PROGRAM_ID_BY_TYPE, {"ProgramID": program_id}, "ProgramID",
+        MieleAppliance.STEAM_OVEN_COMBI,
+        _MODEL_PROGRAM_ID.get(model_name({"tech_type": "DGC 6860 D"})),
+    ) == name
+
+
+def test_other_steam_combi_ovens_keep_1_as_defrost():
+    assert _lookup_for_type(
+        _PROGRAM_ID_BY_TYPE, {"ProgramID": 1}, "ProgramID",
+        MieleAppliance.STEAM_OVEN_COMBI, None,
+    ) == "defrost"
