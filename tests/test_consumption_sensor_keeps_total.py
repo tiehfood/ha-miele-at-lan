@@ -113,3 +113,10 @@ async def test_a_restored_non_number_is_ignored(make_entities, monkeypatch):
     coord._data.state["ExtendedState"] = ""
     await water.async_added_to_hass()
     assert water.native_value is None
+
+
+@pytest.mark.asyncio
+async def test_finish_time_uses_the_wobble_holding_entity(make_entities):
+    _, build = make_entities()
+    by_id = await build()
+    assert isinstance(by_id["test-dish_finish_time"], sensor.MieleLanFinishTimeSensor)

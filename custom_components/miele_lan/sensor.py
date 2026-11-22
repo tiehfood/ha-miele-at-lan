@@ -59,6 +59,7 @@ from .const import (
     STATUS_IN_USE,
     STATUS_PAUSE,
     STATUS_PROGRAM_ENDED,
+    WASHER_TYPES,
     WINE_FAMILY,
     MieleAppliance,
     is_idle_state,
@@ -338,6 +339,9 @@ def _oven_core_temperature(data: MieleLanData) -> int | float | None:
     if model_name(data.ident) != "H6800BMX":
         return None
     return parse_h6800bmx_core_temperature(data.state.get("ExtendedState"))
+
+
+FINISH_TIME_WOBBLE = _dt.timedelta(minutes=1)
 
 
 def _finish_time(state: dict[str, Any]) -> _dt.datetime | None:
@@ -1118,7 +1122,7 @@ DEVICE_CONTEXT_SENSORS: tuple[MieleLanDeviceContextSensorDef, ...] = (
         ),
     ),
     MieleLanDeviceContextSensorDef(
-        types=DISHWASHER_FAMILY,
+        types=(*DISHWASHER_FAMILY, *WASHER_TYPES),
         description=MieleLanDeviceContextSensorDescription(
             key="lifetime_energy",
             translation_key="lifetime_energy",
@@ -1133,7 +1137,7 @@ DEVICE_CONTEXT_SENSORS: tuple[MieleLanDeviceContextSensorDef, ...] = (
         ),
     ),
     MieleLanDeviceContextSensorDef(
-        types=DISHWASHER_FAMILY,
+        types=(*DISHWASHER_FAMILY, *WASHER_TYPES),
         description=MieleLanDeviceContextSensorDescription(
             key="lifetime_water",
             translation_key="lifetime_water",
@@ -1279,6 +1283,8 @@ async def async_setup_entry(
                 entities.append(MieleLanProgramRawSensor(coord, d.description))
             elif key in ("energy_consumption", "water_consumption"):
                 entities.append(MieleLanConsumptionSensor(coord, d.description))
+            elif key == "finish_time":
+                entities.append(MieleLanFinishTimeSensor(coord, d.description))
             else:
                 entities.append(MieleLanSensor(coord, d.description))
         for d in IDENT_SENSORS:
@@ -1396,6 +1402,33 @@ class MieleLanConsumptionSensor(MieleLanSensor, RestoreSensor):
     def native_value(self) -> Any:
         value = super().native_value
         if value is not None:
+            self._last_value = value
+        return self._last_value
+
+
+class MieleLanFinishTimeSensor(MieleLanSensor):
+    """Finish time that holds through a one-minute wobble.
+
+    RemainingTime is in whole minutes and the appliance counts it down out of
+    step with the clock, so now + remaining alternates between two adjacent
+    minutes for most of a programme (#76). A larger change, such as a new
+    programme or delayed start, comes through on the next update.
+    """
+
+    def __init__(
+        self, coordinator: MieleLanCoordinator, description: MieleLanSensorDescription
+    ) -> None:
+        super().__init__(coordinator, description)
+        self._last_value: _dt.datetime | None = None
+
+    @property
+    def native_value(self) -> Any:
+        value = super().native_value
+        if (
+            value is None
+            or self._last_value is None
+            or abs(value - self._last_value) > FINISH_TIME_WOBBLE
+        ):
             self._last_value = value
         return self._last_value
 

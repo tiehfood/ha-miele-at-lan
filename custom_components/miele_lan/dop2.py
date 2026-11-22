@@ -247,21 +247,25 @@ def _decode_dos_container(c: dict[int, tuple[int, Any]]) -> dict[str, Any]:
 
 
 def _lifetime_total(
-    device_attributes: dict[int, tuple[int, Any]] | None, attr: int, int_type: int
+    device_attributes: dict[int, tuple[int, Any]] | None,
+    attr: int,
+    int_type: int | tuple[int, ...],
 ) -> int | None:
     """Accumulated total from DWTDWM attrs 5/6 (GLOBAL_GenericParameterValueU32).
 
     Field 4 is CurrentValue; field 6 must carry the expected IntType
     (121 GLOBAL_VALINT_ENERGY_WH / 44 GLOBAL_VALINT_ECO_WATER_LITER) —
     None otherwise, so a model reporting a different unit (e.g. 45
-    GLOBAL_VALINT_ECO_ENERGY_KWH) is never misread.
+    GLOBAL_VALINT_ECO_ENERGY_KWH) is never misread. Pass a tuple when
+    more than one IntType means the same unit.
     """
     if not device_attributes:
         return None
     m = device_attributes.get(attr)
     if m and isinstance(m[1], dict):
         sub = m[1]
-        if sub.get(6, (None, None))[1] != int_type:
+        accepted = int_type if isinstance(int_type, tuple) else (int_type,)
+        if sub.get(6, (None, None))[1] not in accepted:
             return None
         total = sub.get(4, (None, None))[1]
         if isinstance(total, int):
@@ -357,7 +361,10 @@ def parse_global_device_context(payload: bytes) -> dict[str, Any]:
         ),
         # GLOBAL_GenericParameterValueU32 with IntType field 6 =
         # 121 (GLOBAL_VALINT_ENERGY_WH) / 44 (GLOBAL_VALINT_ECO_WATER_LITER).
-        "lifetime_energy_wh": _lifetime_total(device_attributes, 5, 121),
+        # A WEJ885 washer tags its energy 46 (next to 45 ECO_ENERGY_KWH);
+        # its total tracks the Miele app's yearly kWh as Wh, the same
+        # ratio as its water litres do (see test_dop2_lifetime_consumption).
+        "lifetime_energy_wh": _lifetime_total(device_attributes, 5, (121, 46)),
         "lifetime_water_l": _lifetime_total(device_attributes, 6, 44),
         "wash2dry_state": (
             _WASH2DRY_LABELS.get(wash2dry_raw) if wash2dry_raw is not None else None
