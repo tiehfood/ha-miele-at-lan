@@ -258,6 +258,11 @@ def _lifetime_total(
     None otherwise, so a model reporting a different unit (e.g. 45
     GLOBAL_VALINT_ECO_ENERGY_KWH) is never misread. Pass a tuple when
     more than one IntType means the same unit.
+
+    Several laundry appliances leave the IntType at 0. Their totals count
+    in the same Wh / litres (see test_dop2_lifetime_consumption), so an
+    untagged total is read too, except an untagged 0: that is a counter
+    the appliance does not keep, such as water on a dryer.
     """
     if not device_attributes:
         return None
@@ -265,10 +270,11 @@ def _lifetime_total(
     if m and isinstance(m[1], dict):
         sub = m[1]
         accepted = int_type if isinstance(int_type, tuple) else (int_type,)
-        if sub.get(6, (None, None))[1] not in accepted:
+        tag = sub.get(6, (None, None))[1]
+        if tag != 0 and tag not in accepted:
             return None
         total = sub.get(4, (None, None))[1]
-        if isinstance(total, int):
+        if isinstance(total, int) and (tag != 0 or total):
             return total
     return None
 
@@ -361,7 +367,7 @@ def parse_global_device_context(payload: bytes) -> dict[str, Any]:
         ),
         # GLOBAL_GenericParameterValueU32 with IntType field 6 =
         # 121 (GLOBAL_VALINT_ENERGY_WH) / 44 (GLOBAL_VALINT_ECO_WATER_LITER).
-        # A WEJ885 washer tags its energy 46 (next to 45 ECO_ENERGY_KWH);
+        # A WEJ885 washer tags its energy 46 (GLOBAL_VALINT_ECO_ENERGY_WATT);
         # its total tracks the Miele app's yearly kWh as Wh, the same
         # ratio as its water litres do (see test_dop2_lifetime_consumption).
         "lifetime_energy_wh": _lifetime_total(device_attributes, 5, (121, 46)),

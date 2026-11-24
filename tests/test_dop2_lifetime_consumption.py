@@ -119,11 +119,17 @@ def test_lifetime_value_fns() -> None:
 # lifetime / 12 months is 1.121 for energy and 1.114 for water, so the two
 # counters move together and IntType 46 is Wh, not kWh.
 #
-# Dryer: attr 5 = 59868 with IntType 0 (untagged). It fits Wh (app: 51.4
-# kWh over 12 months) but nothing in the payload says so, so it stays
-# unread.
+# Dryer: attr 5 = 59868 with IntType 0 (untagged), which fits Wh (app: 51.4
+# kWh over 12 months); attr 6 is an untagged 0, a dryer has no water counter.
 W1 = Path(__file__).parent / "fixtures" / "wej885_dop2_1585.hex"
 D1 = Path(__file__).parent / "fixtures" / "tel785wp_dop2_1585.hex"
+# WCI660 washer (EK037, FW 04.05) from issue #67, about 2 minutes into a wash
+# and just after its end. Both totals are untagged (IntType 0). The run
+# settles the unit: the programme's own energy counter read 855 at the end
+# (a wash uses 0.855 kWh, not 855), and the lifetime total grew by exactly
+# that; water grew by 35 against the programme's 36 L.
+C1 = Path(__file__).parent / "fixtures" / "wci660_dop2_1585_running.hex"
+C2 = Path(__file__).parent / "fixtures" / "wci660_dop2_1585_program_ended.hex"
 
 
 def test_wej885_washer_lifetime_totals() -> None:
@@ -132,15 +138,30 @@ def test_wej885_washer_lifetime_totals() -> None:
     assert ctx["lifetime_water_l"] == 9052
 
 
-def test_tel785wp_dryer_untagged_energy_is_not_read() -> None:
+def test_wci660_washer_untagged_totals() -> None:
+    running = _ctx(bytes.fromhex(C1.read_text().strip()))
+    ended = _ctx(bytes.fromhex(C2.read_text().strip()))
+    assert running["lifetime_energy_wh"] == 1904007
+    assert running["lifetime_water_l"] == 93023
+    assert ended["lifetime_energy_wh"] == 1904862
+    assert ended["lifetime_water_l"] == 93058
+    last_programme_wh = ended["device_attributes_dwtdwm"][3][1][4][1]
+    assert last_programme_wh == 855
+    assert ended["lifetime_energy_wh"] - running["lifetime_energy_wh"] == last_programme_wh
+
+
+def test_tel785wp_dryer_untagged_energy() -> None:
     ctx = _ctx(bytes.fromhex(D1.read_text().strip()))
-    assert ctx["lifetime_energy_wh"] is None
+    assert ctx["lifetime_energy_wh"] == 59868
+    # An untagged 0 is a counter the appliance does not keep.
     assert ctx["lifetime_water_l"] is None
 
 
-def test_lifetime_sensors_cover_washers_but_not_dryers() -> None:
-    for key in ("lifetime_energy", "lifetime_water"):
-        [d] = [d for d in DEVICE_CONTEXT_SENSORS if d.description.key == key]
+def test_lifetime_sensor_types() -> None:
+    [energy] = [d for d in DEVICE_CONTEXT_SENSORS if d.description.key == "lifetime_energy"]
+    [water] = [d for d in DEVICE_CONTEXT_SENSORS if d.description.key == "lifetime_water"]
+    for d in (energy, water):
         assert MieleAppliance.WASHING_MACHINE in d.types
-        assert MieleAppliance.TUMBLE_DRYER not in d.types
         assert MieleAppliance.WASHER_DRYER not in d.types
+    assert MieleAppliance.TUMBLE_DRYER in energy.types
+    assert MieleAppliance.TUMBLE_DRYER not in water.types

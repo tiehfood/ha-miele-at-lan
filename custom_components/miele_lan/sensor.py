@@ -50,6 +50,7 @@ from .const import (
     CYCLE_FAMILY,
     DISHWASHER_FAMILY,
     DOMAIN,
+    DRYER_TYPES,
     HOB_FAMILY,
     LAUNDRY_FAMILY,
     OVEN_FAMILY,
@@ -1119,7 +1120,7 @@ DEVICE_CONTEXT_SENSORS: tuple[MieleLanDeviceContextSensorDef, ...] = (
         ),
     ),
     MieleLanDeviceContextSensorDef(
-        types=(*DISHWASHER_FAMILY, *WASHER_TYPES),
+        types=(*DISHWASHER_FAMILY, *WASHER_TYPES, *DRYER_TYPES),
         description=MieleLanDeviceContextSensorDescription(
             key="lifetime_energy",
             translation_key="lifetime_energy",

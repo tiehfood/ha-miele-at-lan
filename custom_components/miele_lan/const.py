@@ -267,6 +267,13 @@ WASHER_TYPES: tuple[MieleAppliance, ...] = (
     MieleAppliance.WASHING_MACHINE_PROFESSIONAL,
 )
 
+# Tumble dryers only: they keep a 2/1585 lifetime energy total but no water.
+DRYER_TYPES: tuple[MieleAppliance, ...] = (
+    MieleAppliance.TUMBLE_DRYER,
+    MieleAppliance.TUMBLE_DRYER_SEMI_PROFESSIONAL,
+    MieleAppliance.DRYER_PROFESSIONAL,
+)
+
 DISHWASHER_FAMILY: tuple[MieleAppliance, ...] = (
     MieleAppliance.DISHWASHER,
     MieleAppliance.DISHWASHER_SEMI_PROFESSIONAL,
