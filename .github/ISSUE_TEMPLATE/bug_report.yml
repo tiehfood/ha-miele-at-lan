@@ -1,0 +1,38 @@
+name: Bug report
+description: Something does not work, or an appliance shows wrong or missing values
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Raw data from the appliance usually answers the question in one round. The README explains how to get it:
+        [Debug logs](https://github.com/tiehfood/ha-miele-at-lan#debug-logs) and
+        [Read raw data from an appliance](https://github.com/tiehfood/ha-miele-at-lan#read-raw-data-from-an-appliance).
+  - type: input
+    id: appliance
+    attributes:
+      label: Appliance
+      description: Model, Wi-Fi module and firmware, as shown on the device page in Home Assistant.
+      placeholder: G 7650 SCVi, XKM EK057S, firmware 09.14
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Miele@LAN version
+      placeholder: v1.26.0
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happens, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Debug log or raw data
+      description: >-
+        Debug log lines containing `polled /State:` or `push /State content:` from the moment it goes wrong.
+        For a missing or wrong value, also the response of `miele_lan.dump_rest_resource` for `State`.
+      render: text

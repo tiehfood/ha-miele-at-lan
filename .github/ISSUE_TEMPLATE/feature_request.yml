@@ -1,0 +1,29 @@
+name: Feature request
+description: A sensor, control or appliance that Miele@LAN does not support yet
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Miele@LAN adds what only the appliance can provide over the home network. Things Home Assistant can already do with a template, helper, utility meter or automation are better built there.
+  - type: input
+    id: appliance
+    attributes:
+      label: Appliance
+      description: Model, Wi-Fi module and firmware, as shown on the device page in Home Assistant.
+      placeholder: WCI 660, XKM EK037, firmware 04.05
+    validations:
+      required: true
+  - type: textarea
+    id: request
+    attributes:
+      label: What would you like, and what would you use it for?
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Raw data that shows the value
+      description: >-
+        If you already found where the appliance reports it, paste the response of
+        `miele_lan.dump_rest_resource` or `miele_lan.dump_dop2_leaf`, and say what the appliance was doing at the time.
+      render: text
