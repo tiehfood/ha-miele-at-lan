@@ -87,6 +87,13 @@ class FakeSession:
         return self.post_routes.get(url, _Resp(200, {"access_token": "a"}))
 
 
+def setup_function(_function):
+    """resolve_oidc() now caches per country for the process; each test below
+    reuses `pl`/`de` with different fake responses, so start from an empty cache."""
+    cloud._OIDC_CACHE.clear()
+    cloud._OIDC_CACHE_LOCKS.clear()
+
+
 def _run(coro):
     return asyncio.run(coro)
 
@@ -182,3 +189,29 @@ def test_refresh_default_url_unchanged():
     s = FakeSession({"locales": _Resp(500)})
     _run(cloud.refresh_access_token(s, "de", "r"))
     assert s.posts[0][0] == "https://prod.map.miele-iot.com/de/token"
+
+
+def test_resolve_oidc_is_cached_per_country():
+    s = _pl_session()
+    first = _run(cloud.resolve_oidc(s, "pl"))
+    assert len(s.gets) == 2  # locales + the authorize probe
+    second = _run(cloud.resolve_oidc(s, "PL"))  # case-insensitive, same entry
+    assert second == first
+    assert len(s.gets) == 2  # no new request on the cache hit
+
+
+def test_resolve_oidc_caches_none_for_map_gateway_too():
+    s = FakeSession(
+        {
+            "locales": _Resp(
+                200,
+                _locales(
+                    "https://prod.map.miele-iot.com/de/authorize",
+                    "https://prod.map.miele-iot.com/de/token",
+                ),
+            )
+        }
+    )
+    assert _run(cloud.resolve_oidc(s, "de")) is None
+    assert _run(cloud.resolve_oidc(s, "de")) is None
+    assert len(s.gets) == 1

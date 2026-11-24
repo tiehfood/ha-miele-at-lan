@@ -210,10 +210,39 @@ class OidcOverride:
     client_id: str
 
 
+# Per-country result of resolve_oidc(), kept for the life of the process. A sales
+# company does not move between the MAP gateway and its own OIDC endpoint while
+# Home Assistant is running, and refresh_access_token() calls resolve_oidc() on
+# every cycle of the ~50min token-refresh loop for every cloud-paired config
+# entry — without this, that is an unauthenticated /V3/Locales request (plus, for
+# an own-endpoint country, an authorize probe) all day, forever, per entry.
+_OIDC_CACHE: dict[str, OidcOverride | None] = {}
+_OIDC_CACHE_LOCKS: dict[str, asyncio.Lock] = {}
+
+
 async def resolve_oidc(
     session: aiohttp.ClientSession, cc: str
 ) -> OidcOverride | None:
     """Live login endpoints for `cc`, or None when the default MAP gateway applies.
+
+    Cached per country for the life of the process — see `_OIDC_CACHE` above.
+    """
+    cc = cc.lower()
+    if cc in _OIDC_CACHE:
+        return _OIDC_CACHE[cc]
+    lock = _OIDC_CACHE_LOCKS.setdefault(cc, asyncio.Lock())
+    async with lock:
+        if cc in _OIDC_CACHE:  # filled by a concurrent caller while we waited
+            return _OIDC_CACHE[cc]
+        result = await _resolve_oidc_uncached(session, cc)
+        _OIDC_CACHE[cc] = result
+        return result
+
+
+async def _resolve_oidc_uncached(
+    session: aiohttp.ClientSession, cc: str
+) -> OidcOverride | None:
+    """The actual `/V3/Locales` + authorize-probe lookup behind `resolve_oidc`.
 
     Miele publishes the real endpoints per sales company at
     `GET /V3/Locales?org=<ISO>` (no auth). Most countries point at
