@@ -284,12 +284,24 @@ async def cmd_commission(args: argparse.Namespace) -> int:
             )
 
         if not (200 <= status < 300):
-            print(f"\n✗ Commissioning FAILED with HTTP {status}.")
-            if status == 403:
-                print("  HTTP 403 = device already has these keys. Continuing to EnableApplianceGroupMode step.")
-                print("  (use --enable-only to skip this PUT entirely on subsequent runs)")
-            else:
+            print(f"\n✗ Commissioning PUT returned HTTP {status}.")
+            if status != 403:
                 return 1
+            # A 403 is ambiguous: the appliance may already hold *these* keys, but it also
+            # answers 403 when other keys are installed or the cloud-TAN gate is enforced
+            # (seen on new-generation models). Only continue if a signed request made with
+            # the supplied keys is accepted; otherwise nothing is saved.
+            if args.no_verify:
+                print("  HTTP 403 cannot be confirmed with --no-verify; refusing to continue.")
+                print("  Nothing was written.")
+                return 1
+            print("  HTTP 403 is ambiguous. Checking with a signed GET /Devices using these keys...")
+            if not await _signed_check(args.device, group_id, group_key):
+                print("✗ The appliance did not accept the supplied keys (signed request failed).")
+                print("  It probably holds other keys or requires a cloud TAN (--use-cloud-tan).")
+                print("  Nothing was written.")
+                return 1
+            print("  Signed request accepted: the appliance already holds these keys.")
     print("\n✓ Commissioning accepted (or already in place). Saving keys.")
 
     # Detect device route by signed GET /Devices (best-effort — needs asyncmiele installed)
@@ -567,6 +579,19 @@ async def _enable_group_mode(
             return True
     except Exception as e:
         print(f"  ✗ signed PUT /Security/Commissioning/ failed: {type(e).__name__}: {e}")
+        return False
+
+
+async def _signed_check(device: str, group_id: str, group_key: str) -> bool:
+    """True if a signed GET /Devices made with these keys is accepted by the appliance."""
+    try:
+        sys.path.insert(0, str(ROOT))
+        from custom_components.miele_lan.api import MieleLanClient
+        async with MieleLanClient.from_hex(device, group_id, group_key, "_unknown", timeout=8.0) as c:
+            await c.get_devices()
+            return True
+    except Exception as e:
+        print(f"  (signed check failed: {type(e).__name__}: {e})")
         return False
 
 
