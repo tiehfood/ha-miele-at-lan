@@ -21,11 +21,11 @@ from homeassistant.helpers import config_validation as cv, device_registry as dr
 from .api import build_program_select_payload
 from .const import DOMAIN, PROGRAM_SELECT_LEAF, PROGRAM_SELECT_UNIT
 from .dop2_dump import (
-    ALLOWED_REST_RESOURCES,
     ANY_HTTP_STATUS,
     build_dop2_resource,
     build_rest_resource,
     bytes_to_hex,
+    rest_resource_name,
 )
 from .dop2 import _walk_fields
 
@@ -58,7 +58,7 @@ DUMP_DOP2_LEAF_SCHEMA = vol.Schema(
 DUMP_REST_RESOURCE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): cv.string,
-        vol.Required(ATTR_RESOURCE): vol.In(ALLOWED_REST_RESOURCES),
+        vol.Required(ATTR_RESOURCE): rest_resource_name,
     }
 )
 
@@ -128,7 +128,7 @@ async def _async_dump_dop2_leaf(call: ServiceCall) -> ServiceResponse:
 
 
 async def _async_dump_rest_resource(call: ServiceCall) -> ServiceResponse:
-    """Read-only GET of a plain REST resource (e.g. `/State`); never writes.
+    """Read-only GET of a REST resource below the appliance; never writes.
 
     Useful when a device's firmware doesn't implement DOP2 at all (every
     `dump_dop2_leaf` call 404s) but plain REST resources like `/State` still

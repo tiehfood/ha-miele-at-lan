@@ -14,11 +14,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from custom_components.miele_lan.dop2_dump import (  # noqa: E402
-    ALLOWED_REST_RESOURCES,
     ANY_HTTP_STATUS,
+    REST_RESOURCE_SUGGESTIONS,
     build_dop2_resource,
     build_rest_resource,
     bytes_to_hex,
+    rest_resource_name,
 )
 from custom_components.miele_lan.services import (  # noqa: E402
     ATTR_ATTRIBUTE,
@@ -116,25 +117,62 @@ def test_build_rest_resource_index_is_the_device_root() -> None:
     )[ATTR_RESOURCE] == "Index"
 
 
-def test_service_selector_offers_every_allowed_resource() -> None:
-    # The Developer tools dropdown comes from services.yaml, the validation
-    # from ALLOWED_REST_RESOURCES; a resource missing from either is unusable.
+def test_service_selector_offers_the_suggested_resources() -> None:
     import yaml
 
-    options = yaml.safe_load(
+    select = yaml.safe_load(
         (ROOT / "custom_components/miele_lan/services.yaml").read_text()
-    )["dump_rest_resource"]["fields"]["resource"]["selector"]["select"]["options"]
-    assert tuple(options) == ALLOWED_REST_RESOURCES
+    )["dump_rest_resource"]["fields"]["resource"]["selector"]["select"]
+    assert tuple(select["options"]) == REST_RESOURCE_SUGGESTIONS
+    # Without it the dropdown refuses the names a new appliance's index links.
+    assert select["custom_value"] is True
 
 
-def test_build_rest_resource_rejects_unknown_resource() -> None:
+@pytest.mark.parametrize(
+    ("resource", "path"),
+    [
+        ("Device", "/Devices/000000000000/Device"),
+        ("Device/", "/Devices/000000000000/Device/"),
+        ("CS-Update/", "/Devices/000000000000/CS-Update/"),
+        ("State/Status", "/Devices/000000000000/State/Status"),
+        ("DOP2/", "/Devices/000000000000/DOP2/"),
+    ],
+)
+def test_build_rest_resource_takes_a_path_below_the_appliance(
+    resource: str, path: str
+) -> None:
+    assert build_rest_resource("000000000000", resource) == path
+
+
+@pytest.mark.parametrize(
+    "resource",
+    [
+        "",
+        "/",
+        "/Security/HAN",
+        "..",
+        "../Security/HAN",
+        "../../WLAN",
+        "State/../../../WLAN",
+        "State/./Status",
+        "State//Status",
+        "State?x=1",
+        "DOP2/2/1585?idx1=0&idx2=0",
+        "State%2F..%2F..",
+        "State Status",
+        "State\\Status",
+        "S" * 201,
+        None,
+        7,
+    ],
+)
+def test_rest_resource_cannot_leave_the_appliance(resource: object) -> None:
     with pytest.raises(ValueError):
-        build_rest_resource("000000000000", "DOP2/2/1585")
-
-
-def test_allowed_rest_resources_contains_state_and_ident() -> None:
-    assert "State" in ALLOWED_REST_RESOURCES
-    assert "Ident" in ALLOWED_REST_RESOURCES
+        rest_resource_name(resource)
+    with pytest.raises(ValueError):
+        build_rest_resource("000000000000", resource)  # type: ignore[arg-type]
+    with pytest.raises(vol.Invalid):
+        DUMP_REST_RESOURCE_SCHEMA({ATTR_DEVICE_ID: "abc123", ATTR_RESOURCE: resource})
 
 
 def test_rest_resource_schema_requires_device_id_and_resource() -> None:
@@ -142,14 +180,10 @@ def test_rest_resource_schema_requires_device_id_and_resource() -> None:
         DUMP_REST_RESOURCE_SCHEMA({ATTR_RESOURCE: "State"})
 
 
-def test_rest_resource_schema_rejects_resource_outside_allow_list() -> None:
-    with pytest.raises(vol.Invalid):
-        DUMP_REST_RESOURCE_SCHEMA({ATTR_DEVICE_ID: "abc123", ATTR_RESOURCE: "DOP2/2/1585"})
-
-
-def test_rest_resource_schema_accepts_known_resource() -> None:
-    result = DUMP_REST_RESOURCE_SCHEMA({ATTR_DEVICE_ID: "abc123", ATTR_RESOURCE: "State"})
-    assert result[ATTR_RESOURCE] == "State"
+@pytest.mark.parametrize("resource", [*REST_RESOURCE_SUGGESTIONS, "WakeupSource/"])
+def test_rest_resource_schema_accepts_resource(resource: str) -> None:
+    result = DUMP_REST_RESOURCE_SCHEMA({ATTR_DEVICE_ID: "abc123", ATTR_RESOURCE: resource})
+    assert result[ATTR_RESOURCE] == resource
 
 
 # ------------------------------------------------------ coordinator lookup

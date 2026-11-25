@@ -50,6 +50,7 @@ dump_rest_resource:
       example: State
       selector:
         select:
+          custom_value: true
           options:
             - "Ident"
             - "State"

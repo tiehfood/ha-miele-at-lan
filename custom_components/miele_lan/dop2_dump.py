@@ -6,6 +6,8 @@ tests/test_dop2_dump.py without booting HA.
 
 from __future__ import annotations
 
+import re
+
 # Every HTTP status a device might plausibly answer with. The dump service is
 # explicitly interested in the non-200 cases (403/404/500 tell a user whether
 # their firmware exposes a leaf at all), so nothing here should raise.
@@ -24,15 +26,34 @@ def bytes_to_hex(data: bytes) -> str:
     return data.hex()
 
 
-# Resource names allowed for the generic `dump_rest_resource` debug service.
-# Kept as an allow-list (rather than free-form path building) so the service
-# can only ever GET plain-JSON resources that are safe to paste into an issue
-# — never a DOP2 leaf (use `dump_dop2_leaf` for that) and never a
-# write-capable path.
+# What the `dump_rest_resource` debug service offers in its dropdown. Any other
+# path below the appliance is accepted too, because a new protocol generation
+# links resources nobody has seen yet from its index.
 REST_RESOURCE_INDEX = "Index"
-ALLOWED_REST_RESOURCES: tuple[str, ...] = (
+REST_RESOURCE_SUGGESTIONS: tuple[str, ...] = (
     "Ident", "State", "State.ExtendedState", REST_RESOURCE_INDEX,
 )
+
+_REST_PATH = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*/?")
+_REST_PATH_MAX_LENGTH = 200
+
+
+def rest_resource_name(value: object) -> str:
+    """Validate the `resource` input of `dump_rest_resource`.
+
+    The path stays below `/Devices/{fab}/`: the household key and the Wi-Fi
+    credentials live on host-scoped resources, and a result of this service
+    is meant to be pasted into a public issue. So no leading slash, no `..`
+    segment, no query string and no percent-encoding.
+    """
+    if (
+        not isinstance(value, str)
+        or len(value) > _REST_PATH_MAX_LENGTH
+        or not _REST_PATH.fullmatch(value)
+        or any(not segment.strip(".") for segment in value.rstrip("/").split("/"))
+    ):
+        raise ValueError(f"unsupported resource: {value!r}")
+    return value
 
 
 def build_rest_resource(fab: str, resource_name: str) -> str:
@@ -47,10 +68,10 @@ def build_rest_resource(fab: str, resource_name: str) -> str:
 
     `Index` is the device root: the appliance's own list of the resources it
     serves, which is the first thing to look at on a protocol generation
-    that answers 404 on every DOP2 leaf.
+    that answers 404 on every DOP2 leaf. The names it links can be read by
+    passing them as `resource_name`, exactly as typed (a trailing slash is
+    kept, since the index writes its links with one).
     """
-    if resource_name not in ALLOWED_REST_RESOURCES:
-        raise ValueError(f"unsupported resource: {resource_name!r}")
     if resource_name == REST_RESOURCE_INDEX:
         return f"/Devices/{fab}"
-    return f"/Devices/{fab}/{resource_name}"
+    return f"/Devices/{fab}/{rest_resource_name(resource_name)}"

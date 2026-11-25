@@ -2336,7 +2336,7 @@
     },
     "dump_rest_resource": {
       "name": "Dump REST resource",
-      "description": "Reads one plain REST resource (Ident, State, the State ExtendedState blob or the index of resources the appliance offers) from an appliance and returns it as text and hex. Read-only — never writes anything to the appliance. Useful for appliances that don't answer DOP2 reads, when reporting data in a GitHub issue.",
+      "description": "Reads one REST resource of an appliance and returns it as text and hex: Ident, State, the State ExtendedState blob, the index of resources the appliance offers, or any resource that index links. Read-only — never writes anything to the appliance. Useful for appliances that don't answer DOP2 reads, when reporting data in a GitHub issue.",
       "fields": {
         "device_id": {
           "name": "Device",
@@ -2344,7 +2344,7 @@
         },
         "resource": {
           "name": "Resource",
-          "description": "Which resource to read: Ident, State, State.ExtendedState, or Index (the list of resources the appliance offers)."
+          "description": "Which resource to read: Ident, State, State.ExtendedState, or Index (the list of resources the appliance offers). A name from that list can be typed in as well, for example Settings/."
         }
       }
     },
