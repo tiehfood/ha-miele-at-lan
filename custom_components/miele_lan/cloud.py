@@ -182,6 +182,9 @@ class PKCEChallenge:
     nonce: str
     cc: str
     client_id: str
+    # Set when the sales company logs in through its own OIDC endpoint instead of
+    # the default `prod.map.miele-iot.com/<cc>/` gateway (see `resolve_oidc`).
+    token_url: str | None = None
 
 
 @dataclass
@@ -194,19 +197,172 @@ class GroupKey:
     region: str = ""  # REST backend that answered — persist to skip the search later
 
 
-def build_authorize_url(cc: str) -> tuple[str, PKCEChallenge]:
+LOCALES_URL = "https://rest-eu.domestic.miele-iot.com/V3/Locales"
+MAP_HOST = "prod.map.miele-iot.com"
+
+
+@dataclass
+class OidcOverride:
+    """Login endpoints for a sales company that does not use the MAP gateway."""
+
+    authorize_url: str
+    token_url: str
+    client_id: str
+
+
+# Per-country result of resolve_oidc(), kept for the life of the process. A sales
+# company does not move between the MAP gateway and its own OIDC endpoint while
+# Home Assistant is running, and refresh_access_token() calls resolve_oidc() on
+# every cycle of the ~50min token-refresh loop for every cloud-paired config
+# entry — without this, that is an unauthenticated /V3/Locales request (plus, for
+# an own-endpoint country, an authorize probe) all day, forever, per entry.
+_OIDC_CACHE: dict[str, OidcOverride | None] = {}
+_OIDC_CACHE_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+async def resolve_oidc(
+    session: aiohttp.ClientSession, cc: str
+) -> OidcOverride | None:
+    """Live login endpoints for `cc`, or None when the default MAP gateway applies.
+
+    Cached per country for the life of the process — see `_OIDC_CACHE` above.
+    Only a result based on a Locales response that actually came back is
+    cached; a timeout or HTTP error must not stick (as "MAP gateway applies")
+    for the rest of the process just because Locales had one bad moment.
+    """
+    cc = cc.lower()
+    if cc in _OIDC_CACHE:
+        return _OIDC_CACHE[cc]
+    lock = _OIDC_CACHE_LOCKS.setdefault(cc, asyncio.Lock())
+    async with lock:
+        if cc in _OIDC_CACHE:  # filled by a concurrent caller while we waited
+            return _OIDC_CACHE[cc]
+        result, cacheable = await _resolve_oidc_uncached(session, cc)
+        if cacheable:
+            _OIDC_CACHE[cc] = result
+        return result
+
+
+async def _fetch_locales(session: aiohttp.ClientSession, cc: str) -> dict | None:
+    """GET /V3/Locales?org=<ISO>, parsed down to the one sales-company document.
+
+    None means Locales itself gave us nothing to work with — bad status, a
+    connection error, or a body that isn't the JSON we expect. That case must
+    not be cached: it says nothing about the sales company, only that this one
+    request did not land.
+    """
+    try:
+        async with session.get(
+            LOCALES_URL,
+            params={"org": cc.upper()},
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as r:
+            if r.status != 200:
+                return None
+            doc = await r.json(content_type=None)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("OIDC endpoint lookup for %s failed (ignored): %s", cc, err)
+        return None
+    if isinstance(doc, list):
+        doc = doc[0] if doc else {}
+    return doc if isinstance(doc, dict) else None
+
+
+async def _resolve_oidc_uncached(
+    session: aiohttp.ClientSession, cc: str
+) -> tuple[OidcOverride | None, bool]:
+    """The actual `/V3/Locales` + authorize-probe lookup behind `resolve_oidc`.
+
+    Miele publishes the real endpoints per sales company at
+    `GET /V3/Locales?org=<ISO>` (no auth). Most countries point at
+    `prod.map.miele-iot.com/<cc>/...`, which is what the rest of this module
+    assumes. A few (observed 2026-11: PL, IT) point at
+    `api.miele.com/v1/ciam/oidc/op/<apiKey>/...` instead; there the MAP URL
+    rejects the redirect URI, so cloud setup cannot even reach the login form.
+
+    The OIDC client_id is not part of that document. Calling the authorize URL
+    with no parameters redirects to an error page that carries it as
+    `client_id=...`, the same unauthenticated probe `tools/dump_map_countries.py`
+    uses for MAP; if that fails, the built-in `CONSUMER_CLIENT_IDS` entry is used.
+
+    Returns `(override_or_None, cacheable)`. Best effort: any failure returns
+    `(None, False)`, so the previous (uncached) behaviour is kept for that call;
+    only a decision actually derived from a Locales response is `cacheable`.
+    """
+    doc = await _fetch_locales(session, cc)
+    if doc is None:
+        return None, False
+    try:
+        endpoints = {
+            e.get("type"): e.get("uri")
+            for e in ((doc.get("ciam") or {}).get("endpoints") or [])
+        }
+        authorize, token = endpoints.get("authorize"), endpoints.get("token")
+        if not authorize or not token:
+            return None, True
+        if urllib.parse.urlparse(authorize).hostname == MAP_HOST:
+            return None, True  # default gateway: keep the built-in client_id table
+        client_id = None
+        try:
+            async with session.get(
+                authorize, allow_redirects=False, timeout=aiohttp.ClientTimeout(total=15)
+            ) as r:
+                location = r.headers.get("Location", "")
+            client_id = urllib.parse.parse_qs(
+                urllib.parse.urlparse(location).query
+            ).get("client_id", [None])[0]
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("client_id probe for %s failed: %s", cc, err)
+        # The built-in table already holds the right id for PL; the probe is
+        # what lets a country missing from it (or with a changed id) work.
+        client_id = client_id or CONSUMER_CLIENT_IDS.get(cc.lower())
+        if not client_id:
+            return None, True
+        return OidcOverride(authorize, token, client_id), True
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("OIDC endpoint lookup for %s failed (ignored): %s", cc, err)
+        return None, False
+
+
+async def async_build_authorize_url(
+    session: aiohttp.ClientSession, cc: str
+) -> tuple[str, PKCEChallenge]:
+    """`build_authorize_url`, using the sales company's own login endpoint if any."""
+    override = await resolve_oidc(session, cc)
+    if override is None:
+        return build_authorize_url(cc)
+    return build_authorize_url(
+        cc,
+        authorize_url=override.authorize_url,
+        token_url=override.token_url,
+        client_id=override.client_id,
+    )
+
+
+def build_authorize_url(
+    cc: str,
+    *,
+    authorize_url: str | None = None,
+    token_url: str | None = None,
+    client_id: str | None = None,
+) -> tuple[str, PKCEChallenge]:
     """Build the URL the user must open in a browser.
 
     Returns (url, challenge). Persist `challenge` somewhere until the user
     pastes the redirect — exchange_code() needs the verifier + state to
     complete the flow safely.
+
+    `authorize_url`, `token_url` and `client_id` override the default MAP
+    gateway for sales companies that use their own OIDC endpoint, see
+    `resolve_oidc`.
     """
     cc = cc.lower()
-    if cc not in CONSUMER_CLIENT_IDS:
-        raise ValueError(
-            f"Unknown country {cc!r}; supported: {sorted(CONSUMER_CLIENT_IDS)}"
-        )
-    client_id = CONSUMER_CLIENT_IDS[cc]
+    if client_id is None:
+        if cc not in CONSUMER_CLIENT_IDS:
+            raise ValueError(
+                f"Unknown country {cc!r}; supported: {sorted(CONSUMER_CLIENT_IDS)}"
+            )
+        client_id = CONSUMER_CLIENT_IDS[cc]
     verifier = _b64url(secrets.token_bytes(64))
     challenge_hash = _b64url(hashlib.sha256(verifier.encode()).digest())
     state = _b64url(secrets.token_bytes(16))
@@ -222,10 +378,8 @@ def build_authorize_url(cc: str) -> tuple[str, PKCEChallenge]:
         "code_challenge": challenge_hash,
         "code_challenge_method": "S256",
     }
-    url = (
-        f"https://prod.map.miele-iot.com/{cc}/authorize?"
-        + urllib.parse.urlencode(params)
-    )
+    base = authorize_url or f"https://{MAP_HOST}/{cc}/authorize"
+    url = base + "?" + urllib.parse.urlencode(params)
     return url, PKCEChallenge(
         verifier=verifier,
         challenge=challenge_hash,
@@ -233,6 +387,7 @@ def build_authorize_url(cc: str) -> tuple[str, PKCEChallenge]:
         nonce=nonce,
         cc=cc,
         client_id=client_id,
+        token_url=token_url,
     )
 
 
@@ -265,7 +420,7 @@ async def exchange_code(
     Returns the raw token response. Caller is responsible for storing
     `refresh_token` securely.
     """
-    url = f"https://prod.map.miele-iot.com/{challenge.cc}/token"
+    url = challenge.token_url or f"https://{MAP_HOST}/{challenge.cc}/token"
     data = {
         "grant_type": "authorization_code",
         "code": code,
@@ -297,8 +452,12 @@ async def refresh_access_token(
     May rotate the refresh_token — caller should store whichever value the
     response carries (or fall back to the original if not rotated).
     """
-    client_id = CONSUMER_CLIENT_IDS[cc.lower()]
-    url = f"https://prod.map.miele-iot.com/{cc.lower()}/token"
+    override = await resolve_oidc(session, cc)
+    if override is not None:
+        client_id, url = override.client_id, override.token_url
+    else:
+        client_id = CONSUMER_CLIENT_IDS[cc.lower()]
+        url = f"https://{MAP_HOST}/{cc.lower()}/token"
     data = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
@@ -525,6 +684,9 @@ __all__ = [
     "PKCEChallenge",
     "GroupKey",
     "build_authorize_url",
+    "async_build_authorize_url",
+    "resolve_oidc",
+    "OidcOverride",
     "parse_redirect_url",
     "exchange_code",
     "refresh_access_token",

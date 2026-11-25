@@ -29,7 +29,7 @@ from .api import MieleLanClient
 from .cloud import (
     CONSUMER_CLIENT_IDS,
     PKCEChallenge,
-    build_authorize_url,
+    async_build_authorize_url,
     exchange_code,
     fetch_groupkey,
     parse_redirect_url,
@@ -121,7 +121,10 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Pick the country whose Miele cloud tenant we'll auth against."""
         if user_input is not None:
             cc = user_input[CONF_COUNTRY]
-            self._authorize_url, self._challenge = build_authorize_url(cc)
+            async with aiohttp.ClientSession() as session:
+                self._authorize_url, self._challenge = await async_build_authorize_url(
+                    session, cc
+                )
             return await self.async_step_cloud_authorize()
         return self.async_show_form(
             step_id="cloud_country",
