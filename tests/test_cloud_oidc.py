@@ -134,7 +134,40 @@ def test_resolve_oidc_none_when_locales_fail():
         {"locales": _Resp(200, [])},
         {"locales": _Resp(200, [{"ciam": {"active": False, "endpoints": []}}])},
     ):
+        cloud._OIDC_CACHE.clear()  # each case must actually run, not hit the last one's cache
         assert _run(cloud.resolve_oidc(FakeSession(routes), "pl")) is None
+
+
+def test_locales_failure_is_not_cached():
+    """A 500/timeout must not stick as "MAP gateway applies" for the process."""
+
+    class FlakyThenFixedSession(FakeSession):
+        """Locales 500s once, then serves the real document; the authorize
+        probe (second GET, once Locales recovers) echoes a client_id."""
+
+        def __init__(self):
+            super().__init__({})
+            self._locales_calls = 0
+
+        def get(self, url, params=None, **kwargs):
+            self.gets.append(url)
+            if url == cloud.LOCALES_URL:
+                self._locales_calls += 1
+                if self._locales_calls == 1:
+                    return _Resp(500)
+                return _Resp(200, _locales(PL_AUTHORIZE, PL_TOKEN))
+            if url == PL_AUTHORIZE:
+                return _Resp(302, None, {"Location": f"https://idp.example/err?client_id={ECHOED_ID}"})
+            return _Resp(404)
+
+    s = FlakyThenFixedSession()
+    assert _run(cloud.resolve_oidc(s, "pl")) is None  # Locales 500: not cached
+    assert cloud._OIDC_CACHE == {}
+
+    second = _run(cloud.resolve_oidc(s, "pl"))  # retried: Locales answers this time
+    assert second == cloud.OidcOverride(PL_AUTHORIZE, PL_TOKEN, ECHOED_ID)
+    assert cloud._OIDC_CACHE == {"pl": second}  # now cached
+    assert s._locales_calls == 2
 
 
 def test_client_id_falls_back_to_table_when_probe_fails():

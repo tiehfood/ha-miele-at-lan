@@ -226,6 +226,9 @@ async def resolve_oidc(
     """Live login endpoints for `cc`, or None when the default MAP gateway applies.
 
     Cached per country for the life of the process — see `_OIDC_CACHE` above.
+    Only a result based on a Locales response that actually came back is
+    cached; a timeout or HTTP error must not stick (as "MAP gateway applies")
+    for the rest of the process just because Locales had one bad moment.
     """
     cc = cc.lower()
     if cc in _OIDC_CACHE:
@@ -234,14 +237,40 @@ async def resolve_oidc(
     async with lock:
         if cc in _OIDC_CACHE:  # filled by a concurrent caller while we waited
             return _OIDC_CACHE[cc]
-        result = await _resolve_oidc_uncached(session, cc)
-        _OIDC_CACHE[cc] = result
+        result, cacheable = await _resolve_oidc_uncached(session, cc)
+        if cacheable:
+            _OIDC_CACHE[cc] = result
         return result
+
+
+async def _fetch_locales(session: aiohttp.ClientSession, cc: str) -> dict | None:
+    """GET /V3/Locales?org=<ISO>, parsed down to the one sales-company document.
+
+    None means Locales itself gave us nothing to work with — bad status, a
+    connection error, or a body that isn't the JSON we expect. That case must
+    not be cached: it says nothing about the sales company, only that this one
+    request did not land.
+    """
+    try:
+        async with session.get(
+            LOCALES_URL,
+            params={"org": cc.upper()},
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as r:
+            if r.status != 200:
+                return None
+            doc = await r.json(content_type=None)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("OIDC endpoint lookup for %s failed (ignored): %s", cc, err)
+        return None
+    if isinstance(doc, list):
+        doc = doc[0] if doc else {}
+    return doc if isinstance(doc, dict) else None
 
 
 async def _resolve_oidc_uncached(
     session: aiohttp.ClientSession, cc: str
-) -> OidcOverride | None:
+) -> tuple[OidcOverride | None, bool]:
     """The actual `/V3/Locales` + authorize-probe lookup behind `resolve_oidc`.
 
     Miele publishes the real endpoints per sales company at
@@ -256,31 +285,27 @@ async def _resolve_oidc_uncached(
     `client_id=...`, the same unauthenticated probe `tools/dump_map_countries.py`
     uses for MAP; if that fails, the built-in `CONSUMER_CLIENT_IDS` entry is used.
 
-    Best effort: any failure returns None, so the previous behaviour is kept.
+    Returns `(override_or_None, cacheable)`. Best effort: any failure returns
+    `(None, False)`, so the previous (uncached) behaviour is kept for that call;
+    only a decision actually derived from a Locales response is `cacheable`.
     """
+    doc = await _fetch_locales(session, cc)
+    if doc is None:
+        return None, False
     try:
-        timeout = aiohttp.ClientTimeout(total=15)
-        async with session.get(
-            LOCALES_URL, params={"org": cc.upper()}, timeout=timeout
-        ) as r:
-            if r.status != 200:
-                return None
-            doc = await r.json(content_type=None)
-        if isinstance(doc, list):
-            doc = doc[0] if doc else {}
         endpoints = {
             e.get("type"): e.get("uri")
             for e in ((doc.get("ciam") or {}).get("endpoints") or [])
         }
         authorize, token = endpoints.get("authorize"), endpoints.get("token")
         if not authorize or not token:
-            return None
+            return None, True
         if urllib.parse.urlparse(authorize).hostname == MAP_HOST:
-            return None  # default gateway: keep the built-in client_id table
+            return None, True  # default gateway: keep the built-in client_id table
         client_id = None
         try:
             async with session.get(
-                authorize, allow_redirects=False, timeout=timeout
+                authorize, allow_redirects=False, timeout=aiohttp.ClientTimeout(total=15)
             ) as r:
                 location = r.headers.get("Location", "")
             client_id = urllib.parse.parse_qs(
@@ -292,11 +317,11 @@ async def _resolve_oidc_uncached(
         # what lets a country missing from it (or with a changed id) work.
         client_id = client_id or CONSUMER_CLIENT_IDS.get(cc.lower())
         if not client_id:
-            return None
-        return OidcOverride(authorize, token, client_id)
+            return None, True
+        return OidcOverride(authorize, token, client_id), True
     except Exception as err:  # noqa: BLE001
         _LOGGER.debug("OIDC endpoint lookup for %s failed (ignored): %s", cc, err)
-        return None
+        return None, False
 
 
 async def async_build_authorize_url(
