@@ -735,14 +735,22 @@ async def mdns_discover_household(
         len(hits), want_group,
     )
 
-    # Signed GET /Devices on each hit to learn the actual fab number(s).
-    results: list[dict[str, Any]] = []
-    for hit in hits.values():
-        fabs = await _signed_get_fabs(
-            ip=hit["ip"],
-            group_id_hex=group_id_hex,
-            group_key_hex=group_key_hex,
+    # Signed GET /Devices on each hit to learn the actual fab number(s), all at
+    # once: _signed_get_fabs() retries once with a 15s timeout, and awaiting
+    # the hits one after another would add up to 30s per unreachable appliance
+    # on top of every other hit's probe.
+    hit_list = list(hits.values())
+    fabs_per_hit = await asyncio.gather(
+        *(
+            _signed_get_fabs(
+                ip=hit["ip"], group_id_hex=group_id_hex, group_key_hex=group_key_hex
+            )
+            for hit in hit_list
         )
+    )
+
+    results: list[dict[str, Any]] = []
+    for hit, fabs in zip(hit_list, fabs_per_hit):
         if not fabs:
             _LOGGER.warning(
                 "[%s] discovered via mDNS but signed GET /Devices returned no fabs "

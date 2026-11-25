@@ -8,6 +8,7 @@ touching HA's config-entry machinery.
 import asyncio
 import logging
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -310,3 +311,33 @@ def test_normal_appliance_hit_still_returned_with_all_exclusions_active(
         "host": NORMAL_IP,
         "hostname": "Miele-oven.local",
     }]
+
+
+def test_signed_get_fabs_probes_run_concurrently(monkeypatch) -> None:
+    """Three unreachable hits must not add up to 3x the per-hit probe time —
+    mdns_discover_household awaits them all at once, not one after another."""
+    ips = [f"203.0.113.{20 + i}" for i in range(3)]
+    names = [f"Miele Oven {i}._mieleathome._tcp.local." for i in range(3)]
+    infos = {
+        name: _FakeServiceInfo(group=GROUP, ip=ip, devicetype=1, server=f"Miele-{i}.local.")
+        for i, (name, ip) in enumerate(zip(names, ips))
+    }
+    probe_delay = 0.1
+
+    monkeypatch.setattr(
+        "zeroconf.asyncio.AsyncServiceBrowser", _fake_browser_factory(names)
+    )
+
+    async def _slow_signed_get_fabs(*, ip, group_id_hex, group_key_hex):
+        await asyncio.sleep(probe_delay)
+        return []
+
+    monkeypatch.setattr(enrollment_mod, "_signed_get_fabs", _slow_signed_get_fabs)
+
+    start = time.monotonic()
+    asyncio.run(mdns_discover_household(
+        GROUP, "00" * 64, timeout=0, zeroconf=_FakeAsyncZeroconf(infos),
+    ))
+    elapsed = time.monotonic() - start
+
+    assert elapsed < len(ips) * probe_delay
