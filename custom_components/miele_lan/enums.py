@@ -504,7 +504,7 @@ H6800BMXProgramId: dict[int, str] = {
 # they apply to this model only.
 H6860BPProgramId: dict[int, str] = {
     2: 'auto_roast',
-    3: 'combined_cooking',
+    3: 'combination_mode',
     4: 'full_grill',
     5: 'economy_grill',
     7: 'fan_plus',
@@ -528,7 +528,7 @@ TMR840WPProgramId: dict[int, str] = {
 # table (1 is Defrost there), so they apply to this model only.
 DGC6860DProgramId: dict[int, str] = {
     1: 'fan_plus',
-    2: 'cake_special',
+    2: 'gentle_bake',
     3: 'conventional_heat',
     4: 'top_heat',
     5: 'bottom_heat',
@@ -537,7 +537,7 @@ DGC6860DProgramId: dict[int, str] = {
     8: 'fan_grill',
     9: 'intensive_bake',
     13: 'steam_cooking',
-    17: 'combined_cooking',
+    17: 'combination_mode',
     29: 'sous_vide',
     61: 'combi_steam',
 }

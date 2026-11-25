@@ -15,8 +15,8 @@ DE = Path(__file__).parents[1] / "custom_components/miele_lan/translations/de.js
 @pytest.mark.parametrize(
     ("key", "name"),
     [("fan_plus", "Heißluft plus"), ("full_grill", "Grill groß"),
-     ("economy_grill", "Grill klein"), ("combined_cooking", "Bräunungsgaren"),
-     ("moisture_plus", "Klimagaren"), ("cake_special", "Kuchen spezial"),
+     ("economy_grill", "Grill klein"), ("combination_mode", "Bräunungsgaren"),
+     ("moisture_plus", "Klimagaren"), ("gentle_bake", "Kuchen spezial"),
      ("moisture_plus_fan_plus", "Klimagaren + Heißluft plus"),
      ("combi_steam", "Kombigaren")],
 )
