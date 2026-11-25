@@ -26,10 +26,13 @@ def bytes_to_hex(data: bytes) -> str:
 
 # Resource names allowed for the generic `dump_rest_resource` debug service.
 # Kept as an allow-list (rather than free-form path building) so the service
-# can only ever GET the handful of plain-JSON resources the integration
-# itself already reads — never a DOP2 leaf (use `dump_dop2_leaf` for that)
-# and never a write-capable path.
-ALLOWED_REST_RESOURCES: tuple[str, ...] = ("Ident", "State", "State.ExtendedState")
+# can only ever GET plain-JSON resources that are safe to paste into an issue
+# — never a DOP2 leaf (use `dump_dop2_leaf` for that) and never a
+# write-capable path.
+REST_RESOURCE_INDEX = "Index"
+ALLOWED_REST_RESOURCES: tuple[str, ...] = (
+    "Ident", "State", "State.ExtendedState", REST_RESOURCE_INDEX,
+)
 
 
 def build_rest_resource(fab: str, resource_name: str) -> str:
@@ -41,7 +44,13 @@ def build_rest_resource(fab: str, resource_name: str) -> str:
     JSON straight from the appliance for debugging — e.g. to see the actual
     length/shape of the hex-encoded `ExtendedState` blob on a model that
     isn't yet covered by `extended_state.py`.
+
+    `Index` is the device root: the appliance's own list of the resources it
+    serves, which is the first thing to look at on a protocol generation
+    that answers 404 on every DOP2 leaf.
     """
     if resource_name not in ALLOWED_REST_RESOURCES:
         raise ValueError(f"unsupported resource: {resource_name!r}")
+    if resource_name == REST_RESOURCE_INDEX:
+        return f"/Devices/{fab}"
     return f"/Devices/{fab}/{resource_name}"

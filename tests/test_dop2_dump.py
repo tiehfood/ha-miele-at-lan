@@ -109,6 +109,24 @@ def test_build_rest_resource_extended_state() -> None:
     )
 
 
+def test_build_rest_resource_index_is_the_device_root() -> None:
+    assert build_rest_resource("000000000000", "Index") == "/Devices/000000000000"
+    assert DUMP_REST_RESOURCE_SCHEMA(
+        {ATTR_DEVICE_ID: "abc123", ATTR_RESOURCE: "Index"}
+    )[ATTR_RESOURCE] == "Index"
+
+
+def test_service_selector_offers_every_allowed_resource() -> None:
+    # The Developer tools dropdown comes from services.yaml, the validation
+    # from ALLOWED_REST_RESOURCES; a resource missing from either is unusable.
+    import yaml
+
+    options = yaml.safe_load(
+        (ROOT / "custom_components/miele_lan/services.yaml").read_text()
+    )["dump_rest_resource"]["fields"]["resource"]["selector"]["select"]["options"]
+    assert tuple(options) == ALLOWED_REST_RESOURCES
+
+
 def test_build_rest_resource_rejects_unknown_resource() -> None:
     with pytest.raises(ValueError):
         build_rest_resource("000000000000", "DOP2/2/1585")

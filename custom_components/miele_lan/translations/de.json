@@ -2336,7 +2336,7 @@
     },
     "dump_rest_resource": {
       "name": "REST-Ressource auslesen",
-      "description": "Liest eine einfache REST-Ressource (Ident, State oder den ExtendedState-Block aus State) von einem Gerät aus und gibt sie als Text und Hex zurück. Rein lesend — schreibt niemals etwas auf das Gerät. Nützlich für Geräte, die keine DOP2-Abfragen beantworten, um Daten in einem GitHub-Issue zu melden.",
+      "description": "Liest eine einfache REST-Ressource (Ident, State, den ExtendedState-Block aus State oder das Verzeichnis der Ressourcen, die das Gerät anbietet) von einem Gerät aus und gibt sie als Text und Hex zurück. Rein lesend — schreibt niemals etwas auf das Gerät. Nützlich für Geräte, die keine DOP2-Abfragen beantworten, um Daten in einem GitHub-Issue zu melden.",
       "fields": {
         "device_id": {
           "name": "Gerät",
@@ -2344,7 +2344,7 @@
         },
         "resource": {
           "name": "Ressource",
-          "description": "Welche Ressource gelesen wird: Ident, State oder State.ExtendedState."
+          "description": "Welche Ressource gelesen wird: Ident, State, State.ExtendedState oder Index (das Verzeichnis der Ressourcen, die das Gerät anbietet)."
         }
       }
     },

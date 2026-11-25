@@ -415,7 +415,7 @@ Network captures do not help, because the traffic is encrypted.
 
 The maintainer may ask you for raw data. Go to **Developer tools** > **Actions** and use one of these. Both only read; they never change anything on the appliance.
 
-- `miele_lan.dump_rest_resource` (**Dump REST resource**): pick the device and a resource (`Ident`, `State` or `State.ExtendedState`).
+- `miele_lan.dump_rest_resource` (**Dump REST resource**): pick the device and a resource (`Ident`, `State`, `State.ExtendedState`, or `Index` for the list of resources the appliance offers).
 - `miele_lan.dump_dop2_leaf` (**Dump DOP2 leaf**): pick the device and enter the unit and attribute numbers you were asked for.
 
 There is also an experimental `miele_lan.select_program` action (**Select programme (experimental)**). It **does** change the selected programme on the appliance. Only use it when asked in an issue.

@@ -54,6 +54,7 @@ dump_rest_resource:
             - "Ident"
             - "State"
             - "State.ExtendedState"
+            - "Index"
 
 select_program:
   fields:
