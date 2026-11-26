@@ -138,6 +138,9 @@ def _lookup_for_type(table_map: dict[MieleAppliance, dict[int, str]],
 # Model specific ProgramID names that take precedence over the shared tables.
 _MODEL_PROGRAM_ID: dict[str, dict[int, str]] = {
     "H6800BMX": enums.H6800BMXProgramId,
+    "DGC6860D": enums.DGC6860DProgramId,
+    "H6860BP": enums.H6860BPProgramId,
+    "TMR840WP": enums.TMR840WPProgramId,
 }
 
 

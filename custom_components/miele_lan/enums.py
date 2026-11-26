@@ -496,6 +496,52 @@ H6800BMXProgramId: dict[int, str] = {
     15: 'browning',
 }
 
+# The H6860BP reports its own ProgramID numbers for the heating functions.
+# Values were read while the matching function was selected on the oven
+# panel. They clash with or are missing from the shared oven table (7 is
+# Auto roast, 9 is Grill, 10 is Full grill, 13 is Fan plus and 19 is
+# Microwave there), so
+# they apply to this model only.
+H6860BPProgramId: dict[int, str] = {
+    2: 'auto_roast',
+    3: 'gentle_bake',
+    4: 'full_grill',
+    5: 'economy_grill',
+    7: 'fan_plus',
+    8: 'intensive_bake',
+    9: 'top_heat',
+    10: 'conventional_heat',
+    12: 'bottom_heat',
+    13: 'fan_grill',
+    19: 'moisture_plus',
+}
+
+# The TMR840WP reports its own ProgramID numbers. Values were read while
+# the matching programme ran. They clash with the shared tumble dryer table
+# (31 is Bed linen there), so they apply to this model only.
+TMR840WPProgramId: dict[int, str] = {
+    31: 'minimum_iron',
+}
+
+# The DGC 6860 D steam combi oven reports its own ProgramID numbers. Values
+# were read while the matching function ran. They clash with the shared oven
+# table (1 is Defrost there), so they apply to this model only.
+DGC6860DProgramId: dict[int, str] = {
+    1: 'fan_plus',
+    2: 'cake_plus',
+    3: 'conventional_heat',
+    4: 'top_heat',
+    5: 'bottom_heat',
+    6: 'full_grill',
+    7: 'economy_grill',
+    8: 'fan_grill',
+    9: 'intensive_bake',
+    13: 'steam_cooking',
+    17: 'gentle_bake',
+    29: 'sous_vide',
+    61: 'combination_mode',
+}
+
 ProgramPhaseMicrowaveOvenCombo: dict[int, str] = {
     0: 'not_running',
     3329: 'heating_up_phase',
