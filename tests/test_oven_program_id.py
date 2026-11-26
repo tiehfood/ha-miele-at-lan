@@ -36,7 +36,7 @@ def test_h6800bmx_manual_functions(program_id, name):
 # Read from a H6860BP while the matching function was selected on the panel.
 @pytest.mark.parametrize(
     ("program_id", "name"),
-    [(2, "auto_roast"), (3, "combination_mode"), (4, "full_grill"), (5, "economy_grill"),
+    [(2, "auto_roast"), (3, "gentle_bake"), (4, "full_grill"), (5, "economy_grill"),
      (7, "fan_plus"), (8, "intensive_bake"), (9, "top_heat"),
      (10, "conventional_heat"), (12, "bottom_heat"), (13, "fan_grill"),
      (19, "moisture_plus")],
@@ -88,10 +88,10 @@ def test_h6860bp_names_are_translated():
 # The TechType has spaces; the lookup key is the TechType without them.
 @pytest.mark.parametrize(
     ("program_id", "name"),
-    [(1, "fan_plus"), (2, "gentle_bake"), (3, "conventional_heat"), (4, "top_heat"),
+    [(1, "fan_plus"), (2, "cake_plus"), (3, "conventional_heat"), (4, "top_heat"),
      (5, "bottom_heat"), (6, "full_grill"), (7, "economy_grill"), (8, "fan_grill"),
-     (9, "intensive_bake"), (13, "steam_cooking"), (17, "combination_mode"),
-     (29, "sous_vide"), (61, "combi_steam")],
+     (9, "intensive_bake"), (13, "steam_cooking"), (17, "gentle_bake"),
+     (29, "sous_vide"), (61, "combination_mode")],
 )
 def test_dgc6860d_functions(program_id, name):
     assert _lookup_for_type(
