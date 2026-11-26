@@ -990,6 +990,7 @@
         "state": {
           "deep_standby": "Tiefschlaf",
           "going_to_standby": "Wechselt in Standby",
+          "switch_on_not_possible": "Standby, Einschalten nicht möglich",
           "network_idle": "Netzwerk-Leerlauf",
           "unknown": "Unbekannt"
         }

@@ -43,11 +43,18 @@ def test_standby_state_three_renders_as_going_to_standby() -> None:
     assert d.description.value_fn(_state_with_standby(3)) == "going_to_standby"
 
 
+def test_standby_state_four_renders_as_switch_on_not_possible() -> None:
+    """The MACI laundry generation reports 4 while it is switched off: standby
+    in which a remote wake-up cannot switch the appliance on."""
+    d = _sensor_def("standby_state")
+    assert d.description.value_fn(_state_with_standby(4)) == "switch_on_not_possible"
+
+
 def test_standby_state_options_cover_every_labelled_value() -> None:
     """ENUM sensors raise if native_value falls outside the declared options
     list — every value STANDBY_STATE_LABELS can produce must be present."""
     d = _sensor_def("standby_state")
-    for value in (0, 1, 2, 3):
+    for value in (0, 1, 2, 3, 4):
         assert d.description.value_fn(_state_with_standby(value)) in d.description.options
 
 
@@ -57,4 +64,10 @@ def test_standby_state_options_has_no_duplicates() -> None:
     d = _sensor_def("standby_state")
     options = d.description.options
     assert len(options) == len(set(options))
-    assert set(options) == {"unknown", "network_idle", "deep_standby", "going_to_standby"}
+    assert set(options) == {
+        "unknown",
+        "network_idle",
+        "deep_standby",
+        "going_to_standby",
+        "switch_on_not_possible",
+    }

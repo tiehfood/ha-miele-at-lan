@@ -990,6 +990,7 @@
         "state": {
           "deep_standby": "Deep standby",
           "going_to_standby": "Going to standby",
+          "switch_on_not_possible": "Standby, switch-on not possible",
           "network_idle": "Network idle",
           "unknown": "Unknown"
         }
