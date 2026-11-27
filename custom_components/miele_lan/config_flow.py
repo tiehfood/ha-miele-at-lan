@@ -40,7 +40,7 @@ from .options_validation import (
     parse_static_ip_lines,
     validate_advertise_address,
 )
-from .push_listener import detect_lan_ip
+from .push_listener import DEFAULT_DEVICE_TYPE, detect_lan_ip
 from .const import (
     CONF_ADVERTISE_ADDRESS,
     CONF_COUNTRY,
@@ -361,6 +361,14 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="no_integration")
 
         props = discovery_info.properties or {}
+        # A Home Assistant push listener (ours, or another install in the same
+        # household) announces itself like an appliance, with a sentinel
+        # device type no real appliance uses. Recognising it by that, rather
+        # than by parsing a fab out of the instance name, also holds when
+        # zeroconf has renamed the instance (`HomeAssistant <fab>-2`), which
+        # turned our own listener into a "new" appliance with a bogus fab.
+        if str(props.get("devicetype") or "") == str(DEFAULT_DEVICE_TYPE):
+            return self.async_abort(reason="not_miele")
         group = (props.get("group") or props.get("Group") or "").upper()
         if not group:
             return self.async_abort(reason="not_miele")
