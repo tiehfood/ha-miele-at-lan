@@ -374,10 +374,10 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Try to extract fab from service-instance name. Our own listener uses
         # "HomeAssistant <fab>" so it works there. Real Miele appliances use
-        # "Miele <model>._mieleathome._tcp.local." with NO fab in the name —
+        # "Miele <model>.<service type>" with NO fab in the name —
         # we'd need a signed GET /Devices to learn it.
         fab = ""
-        bare = discovery_info.name.removesuffix("._mieleathome._tcp.local.")
+        bare = discovery_info.name.removesuffix(f".{discovery_info.type}")
         for tok in reversed(bare.split()):
             digits = "".join(c for c in tok if c.isdigit())
             if len(digits) >= 10:

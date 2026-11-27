@@ -50,7 +50,7 @@ def refine_failure_reason(
     """Sharpen a generic enrollment failure reason with what mDNS actually saw.
 
     `advertised_group` is the `group=` TXT value read from the appliance's
-    `_mieleathome._tcp` service, or `None` if the appliance wasn't found on
+    `_mieleathome._tcp` or `_mielesemiprof._tcp` service, or `None` if the appliance wasn't found on
     mDNS at all. An empty (but present) group means the appliance has never
     been commissioned into any household — there is no key on its side to be
     right or wrong about, so the generic "wrong key / offline / not paired"

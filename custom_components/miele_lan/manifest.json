@@ -19,6 +19,9 @@
   "zeroconf": [
     {
       "type": "_mieleathome._tcp.local."
+    },
+    {
+      "type": "_mielesemiprof._tcp.local."
     }
   ]
 }

@@ -1,6 +1,6 @@
 """SuperVision push listener — HA-side implementation.
 
-We pose as a household peer over mDNS (`_mieleathome._tcp.local.`) so cloud-paired
+We pose as a household peer over mDNS (under every `MIELE_SERVICE_TYPES` entry) so cloud-paired
 appliances dispatch their state changes to us in real time. The wire-level RE
 is captured in [[supervision_protocol_full]] memory; this module is the
 production version of `tools/miele_supervision_listener.py` with HA conventions:
@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from aiohttp import web
+
+from .const import MIELE_SERVICE_TYPES
 
 try:
     from zeroconf import IPVersion, ServiceInfo
@@ -193,7 +195,7 @@ class MielePushListener:
         self._country_domain = country_domain
         self._zc: AsyncZeroconf | None = zeroconf
         self._owns_zc = zeroconf is None
-        self._service_info: ServiceInfo | None = None
+        self._service_infos: list[ServiceInfo] = []
         self._runner: web.AppRunner | None = None
         self._sub_slots: dict[str, int] = {}
         self._hostname = synthetic_mac_hostname(our_fab)
@@ -222,12 +224,13 @@ class MielePushListener:
         )
 
     async def stop(self) -> None:
-        if self._service_info is not None and self._zc is not None:
-            try:
-                await self._zc.async_unregister_service(self._service_info)
-            except Exception as err:
-                _LOGGER.debug("mDNS unregister failed: %s", err)
-            self._service_info = None
+        if self._zc is not None:
+            for info in self._service_infos:
+                try:
+                    await self._zc.async_unregister_service(info)
+                except Exception as err:
+                    _LOGGER.debug("mDNS unregister of %s failed: %s", info.name, err)
+        self._service_infos = []
         if self._owns_zc and self._zc is not None:
             await self._zc.async_close()
             self._zc = None
@@ -250,22 +253,26 @@ class MielePushListener:
             "s": "0",
             "cd": self._country_domain,
         }
-        instance_name = f"HomeAssistant {self._our_fab}._mieleathome._tcp.local."
-        self._service_info = ServiceInfo(
-            "_mieleathome._tcp.local.",
-            instance_name,
-            addresses=[socket.inet_aton(self._host_ip)],
-            port=self._port,
-            properties=desc,
-            server=self._hostname,
-        )
-        await self._zc.async_register_service(self._service_info, allow_name_change=True)
-        _LOGGER.info(
-            "mDNS advertised: %s server=%s addr=%s:%d group=%s "
-            "devicetype=%s — appliances will reach us at this address+port",
-            instance_name, self._hostname, self._host_ip, self._port,
-            self._group_id, self._device_type,
-        )
+        # One instance per Miele service type: each appliance family browses
+        # only its own type when looking for household peers to push to.
+        for service_type in MIELE_SERVICE_TYPES:
+            instance_name = f"HomeAssistant {self._our_fab}.{service_type}"
+            info = ServiceInfo(
+                service_type,
+                instance_name,
+                addresses=[socket.inet_aton(self._host_ip)],
+                port=self._port,
+                properties=desc,
+                server=self._hostname,
+            )
+            await self._zc.async_register_service(info, allow_name_change=True)
+            self._service_infos.append(info)
+            _LOGGER.info(
+                "mDNS advertised: %s server=%s addr=%s:%d group=%s "
+                "devicetype=%s — appliances will reach us at this address+port",
+                instance_name, self._hostname, self._host_ip, self._port,
+                self._group_id, self._device_type,
+            )
 
     async def _start_http(self) -> None:
         app = web.Application()

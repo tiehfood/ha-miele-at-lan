@@ -64,6 +64,8 @@ What you get depends on the appliance type, and sometimes on the model and its f
 | **Coffee system** | Status | Power, Light, Wake |
 | **Dish warmer** | Status, door | Power, Wake |
 
+Semi-professional appliances, such as the PG8133 dishwasher, are found too. They announce themselves under their own network name (`_mielesemiprof._tcp`), and Miele@LAN looks for both. The PG8133 has no DOP2, so it gets status, programme, phase, times and door, but no energy or programme list.
+
 **Wake** and **Stop (remote)** are explained under [Using it](#using-it). **Smart grid** shows whether the machine's SmartGrid setting is on.
 
 Every appliance also gets a **Failure** sensor and a few **diagnostic** sensors (Wi-Fi signal, push status, remote control setting, and more).
@@ -296,7 +298,7 @@ Check:
    - Separate VLANs or guest networks block the announcements. If you use them, ask your router to forward mDNS between them (an "mDNS reflector" or "mDNS repeater").
    - Some managed switches (IGMP snooping), access points and mesh systems filter the announcements.
    - In Docker, run Home Assistant with host networking (`network_mode: host`).
-2. **Look at what Home Assistant hears.** Go to **Settings** > **System** > **Network** and open the Zeroconf browser. Search for `_mieleathome._tcp`.
+2. **Look at what Home Assistant hears.** Go to **Settings** > **System** > **Network** and open the Zeroconf browser. Search for `_mieleathome._tcp`. Semi-professional appliances, such as the PG8133 dishwasher, are listed under `_mielesemiprof._tcp` instead.
    An entry starting with "HomeAssistant" is Miele@LAN itself, not an appliance.
    If that is the only entry, the appliance announcements do not reach Home Assistant: fix the network (point 1) or use static IP addresses. If your appliances are listed, reload the integration.
 3. **Restart the appliance's network module.** Some appliances only start announcing themselves after they are unplugged and plugged back in.

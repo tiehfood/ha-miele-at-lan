@@ -25,6 +25,7 @@ from dataclasses import dataclass
 import aiohttp
 
 from .api import MieleLanClient
+from .const import MIELE_SERVICE_TYPES
 from .enrollment_report import FailedDevice, refine_failure_reason
 
 _LOGGER = logging.getLogger(__name__)
@@ -420,7 +421,7 @@ async def _mdns_groups_by_hostname(
     zeroconf: Any | None = None,
 ) -> dict[str, str]:
     """One mDNS browse — `{hostname.lower(): group}` for every
-    `_mieleathome._tcp.local.` service currently visible on the LAN.
+    Miele service (`MIELE_SERVICE_TYPES`) currently visible on the LAN.
 
     Shares the browse across all failed devices instead of resolving one at
     a time, and reuses HA's shared zeroconf instance when given (same reason
@@ -448,7 +449,7 @@ async def _mdns_groups_by_hostname(
             pending.append(asyncio.create_task(_resolve(service_type, name)))
 
     browser = AsyncServiceBrowser(
-        zc.zeroconf, ["_mieleathome._tcp.local."], handlers=[_on_state]
+        zc.zeroconf, list(MIELE_SERVICE_TYPES), handlers=[_on_state]
     )
     try:
         await asyncio.sleep(timeout)
@@ -521,7 +522,7 @@ class DeviceIpResolver:
         return ip
 
     async def _mdns_resolve(self, fab: str) -> str | None:
-        """Browse `_mieleathome._tcp.local.` and find the entry whose hostname
+        """Browse the Miele service types and find the entry whose hostname
         encodes this fab number (real Miele hostnames embed the WiFi MAC).
 
         We don't have a reverse mapping from fab → MAC, so we collect all
@@ -547,7 +548,7 @@ class DeviceIpResolver:
                 pass  # we'll resolve by direct lookup below
 
             browser = AsyncServiceBrowser(
-                zc.zeroconf, ["_mieleathome._tcp.local."], handlers=[_on_service]
+                zc.zeroconf, list(MIELE_SERVICE_TYPES), handlers=[_on_service]
             )
             await asyncio.sleep(self._mdns_timeout)
             await browser.async_cancel()
@@ -569,7 +570,7 @@ async def mdns_household_ids(
     timeout: float = 4.0,
     zeroconf: Any | None = None,
 ) -> set[str]:
-    """Group IDs advertised by `_mieleathome._tcp.local.` services on this LAN.
+    """Group IDs advertised by Miele services (`MIELE_SERVICE_TYPES`) on this LAN.
 
     The `group=` TXT record needs no credentials to read, unlike
     `mdns_discover_household()` which signs a GET /Devices and therefore needs
@@ -602,7 +603,7 @@ async def mdns_household_ids(
             pending.append(asyncio.create_task(_resolve(service_type, name)))
 
     browser = AsyncServiceBrowser(
-        zc.zeroconf, ["_mieleathome._tcp.local."], handlers=[_on_state]
+        zc.zeroconf, list(MIELE_SERVICE_TYPES), handlers=[_on_state]
     )
     try:
         await asyncio.sleep(timeout)
@@ -627,14 +628,14 @@ async def mdns_discover_household(
     exclude_ip: str | None = None,
     exclude_ip_is_configured: bool = False,
 ) -> list[dict[str, Any]]:
-    """Browse the LAN for `_mieleathome._tcp.local.` services whose `group=`
+    """Browse the LAN for Miele services (`MIELE_SERVICE_TYPES`) whose `group=`
     TXT matches `group_id_hex`, then signed-GET `/Devices` on each to learn
     the device's fab number(s). Returns one dict per discovered fab:
 
         {"fabNr": "...", "deviceType": <int>, "deviceName": "",
          "host": "<ip>", "hostname": "Miele-<eui64>.local."}
 
-    Real Miele appliances advertise as `Miele <model>._mieleathome._tcp.local.`
+    Real Miele appliances advertise as `Miele <model>.<service type>`
     (no fab in the service name), so we cannot extract fab from mDNS alone.
     The signed GET /Devices is the canonical source.
 
@@ -713,7 +714,7 @@ async def mdns_discover_household(
             pending.append(asyncio.create_task(_resolve(service_type, name)))
 
     browser = AsyncServiceBrowser(
-        zc.zeroconf, ["_mieleathome._tcp.local."], handlers=[_on_state]
+        zc.zeroconf, list(MIELE_SERVICE_TYPES), handlers=[_on_state]
     )
     try:
         await asyncio.sleep(timeout)
@@ -726,9 +727,9 @@ async def mdns_discover_household(
 
     if not hits:
         _LOGGER.warning(
-            "mDNS browse found no _mieleathome._tcp.local. services matching "
+            "mDNS browse found no Miele services (%s) matching "
             "group=%s — HA on the same LAN as the appliances?",
-            want_group,
+            ", ".join(MIELE_SERVICE_TYPES), want_group,
         )
         return []
 
