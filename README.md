@@ -101,7 +101,7 @@ Check these points first. Most setup problems come from one of them.
 
 ### Home Assistant 2026.11 and newer (Marketplace)
 
-The Marketplace replaced HACS in Home Assistant 2026.11. Miele@LAN is not in the Marketplace catalog yet, so you add it from a link.
+The Marketplace replaced HACS in Home Assistant 2026.11. Miele@LAN is in its catalog.
 
 **One click:** select this button, then confirm in your Home Assistant.
 
@@ -111,12 +111,9 @@ The Marketplace replaced HACS in Home Assistant 2026.11. Miele@LAN is not in the
 
 1. In Home Assistant, go to **Settings** > **Marketplace**.
    The first time, you see a notice called "Before you install from the Marketplace". Read it, tick **I understand the risks and agree**, and select **Continue**.
-2. In the upper-right corner, select **Add from link**.
-3. Under **GitHub link**, enter `https://github.com/tiehfood/ha-miele-at-lan`.
-4. Select **Add**. If Home Assistant asks for the type, choose **Integration** and select **Add** again.
-   Adding a repository from a link needs a GitHub connection. If you have not connected GitHub yet, Home Assistant asks you to do that first.
-5. Open the Miele@LAN page and select **Install**. Check the version in the dialog and select **Install** again.
-6. On a first install, setup usually opens on its own and asks you to pick a setup method. Go on with [Step 2](#step-2-choose-how-to-get-your-household-key) under Set up.
+2. Search for **Miele@LAN** and select it.
+3. Select **Install**. Check the version in the dialog and select **Install** again.
+4. On a first install, setup usually opens on its own and asks you to pick a setup method. Go on with [Step 2](#step-2-choose-how-to-get-your-household-key) under Set up.
    If Home Assistant says it needs a restart first, select **Restart Home Assistant**. Afterwards, open Miele@LAN in the Marketplace again and select **Set up**.
    If you close setup, you can start it later under **Settings** > **Devices & services**.
 
@@ -125,11 +122,10 @@ If you used HACS before upgrading to 2026.11, your Miele@LAN install moved to th
 ### Home Assistant 2026.10 and older (HACS)
 
 1. Open **HACS** in the sidebar.
-2. Select the three dots in the upper-right corner, then **Custom repositories**.
-3. Enter `https://github.com/tiehfood/ha-miele-at-lan`, choose the type **Integration**, and select **Add**.
-4. Open Miele@LAN in HACS and select **Download**.
-5. Restart Home Assistant.
-6. After the restart, go on with [Set up](#set-up).
+2. Search for **Miele@LAN** and select it.
+3. Select **Download**.
+4. Restart Home Assistant.
+5. After the restart, go on with [Set up](#set-up).
 
 ### Manual installation
 
