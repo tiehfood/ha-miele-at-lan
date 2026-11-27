@@ -11,6 +11,18 @@ DATA_ENROLLED_HOSTS = f"{DOMAIN}_enrolled_hosts"
 DEFAULT_NAME = "Miele@LAN"
 DEFAULT_TIMEOUT = 10.0
 
+# mDNS service types Miele appliances advertise themselves under. Household
+# appliances use `_mieleathome`; semi-professional ones (e.g. the PG8133
+# dishwasher) use `_mielesemiprof`, with the same TXT records (`group=`,
+# `devicetype=`, ...) and the same signed REST API on port 80. Keep this list
+# in sync with the `zeroconf` entries in manifest.json. Our push listener
+# advertises under every type too: a semi-professional appliance browses only
+# its own type when looking for household peers (seen on a PG8133).
+MIELE_SERVICE_TYPES: tuple[str, ...] = (
+    "_mieleathome._tcp.local.",
+    "_mielesemiprof._tcp.local.",
+)
+
 # Status values where program/phase/time fields are stale and should be hidden
 # from the user. Mirrors the official Miele app's gating (RE'd from
 # Oven.UI.1.dll:45992 BuildStateFor(OvenState) and
