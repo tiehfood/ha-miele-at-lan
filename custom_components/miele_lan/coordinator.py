@@ -415,7 +415,8 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
             self._wlan_last_fetch = now
 
     async def _maybe_refresh_hours_of_operation(self) -> None:
-        """Refresh the HoursOfOperation statistics leaf (DOP2 2/119) for ovens.
+        """Refresh the HoursOfOperation statistics leaf (DOP2 2/119) for ovens,
+        washers and dryers.
 
         This is a read-only stats probe, unrelated to whether DOP2 *writes*
         (power, stop-program — leaf 2/1583) work on this device; it must
@@ -427,11 +428,13 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
         latch off after the first one to avoid steady log noise. Any other
         failure (timeouts, 500s — seen on some FW 09.14 units) is treated as
         transient and retried next cycle rather than latched, since it says
-        nothing about whether the leaf is actually supported.
+        nothing about whether the leaf is actually supported. A sleeping
+        washer or dryer answers 500, which lands in that transient path, so
+        the read never wakes it (#65).
         """
         if self._hours_unsupported:
             return
-        if self.device_type not in OVEN_FAMILY:
+        if self.device_type not in (*OVEN_FAMILY, *LAUNDRY_FAMILY):
             return
         now = time.monotonic()
         if now - self._dop2_last_fetch < DOP2_REFRESH_INTERVAL:
