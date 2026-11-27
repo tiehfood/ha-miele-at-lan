@@ -16,7 +16,6 @@ import asyncio
 import logging
 from typing import Any
 
-import aiohttp
 from homeassistant.components import zeroconf as ha_zeroconf
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
@@ -25,16 +24,13 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
 
 from .api import MieleLanClient
-from .cloud import refresh_access_token
 from .const import (
     CONF_ADVERTISE_ADDRESS,
-    CONF_COUNTRY,
     CONF_DEVICES,
     CONF_GROUP_ID,
     CONF_GROUP_KEY,
     CONF_HA_FAB,
     CONF_HA_PORT,
-    CONF_REFRESH_TOKEN,
     CONF_STATIC_IPS,
     CONF_ROUTE,
     DEFAULT_HA_PUSH_PORT,
@@ -387,11 +383,6 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.info(line)
         ir.async_delete_issue(hass, DOMAIN, issue_id)
 
-    if entry.data.get(CONF_REFRESH_TOKEN):
-        bundle["token_refresh_task"] = entry.async_create_background_task(
-            hass, _token_refresh_loop(hass, entry), name=f"{DOMAIN}_token_refresh"
-        )
-
     bundle["options_unsub"] = entry.add_update_listener(_async_options_updated)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = bundle
     # Entities gated on ident fields (hood fan, hood filters, extractor speed)
@@ -422,28 +413,6 @@ async def _safe_stop_listener(listener: MielePushListener) -> None:
         _LOGGER.debug("listener stop on abort failed (ignored): %s", err)
 
 
-async def _token_refresh_loop(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Refresh the access_token every ~50min; rotate refresh_token if Gigya does."""
-    cc = entry.data[CONF_COUNTRY]
-    while True:
-        await asyncio.sleep(50 * 60)
-        refresh = entry.data.get(CONF_REFRESH_TOKEN)
-        if not refresh:
-            return
-        try:
-            async with aiohttp.ClientSession() as session:
-                tokens = await refresh_access_token(session, cc, refresh)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("token refresh failed: %s — retrying next cycle", err)
-            continue
-        new_refresh = tokens.get("refresh_token") or refresh
-        if new_refresh != refresh:
-            hass.config_entries.async_update_entry(
-                entry, data={**entry.data, CONF_REFRESH_TOKEN: new_refresh}
-            )
-            _LOGGER.debug("refresh token rotated")
-
-
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -456,9 +425,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     options_unsub = bundle.get("options_unsub")
     if options_unsub is not None:
         options_unsub()
-    task = bundle.get("token_refresh_task")
-    if task is not None:
-        task.cancel()
     listener = bundle.get("listener")
     if listener is not None:
         await listener.stop()
