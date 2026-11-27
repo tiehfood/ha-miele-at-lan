@@ -34,6 +34,7 @@ from .const import (
     CONF_HA_PORT,
     CONF_STATIC_IPS,
     CONF_ROUTE,
+    DATA_ENROLLED_HOSTS,
     DEFAULT_HA_PUSH_PORT,
     DOMAIN,
 )
@@ -309,6 +310,15 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise
     enrolled = enrollment_result.enrolled
 
+    # Kept outside the entry's bundle on purpose: removing the entry unloads
+    # it first, and async_remove_entry still needs to know where the
+    # appliances are. mDNS households have no stored address otherwise.
+    # Merged, not replaced: an appliance that is asleep during a reload still
+    # holds the registration from the setup before.
+    hass.data.setdefault(DATA_ENROLLED_HOSTS, {}).setdefault(entry.entry_id, {}).update(
+        {ed.fab: ed.host_ip for ed in enrolled}
+    )
+
     # Tidy up stale subscriptions from prior HA installs / fabs. The Miele
     # firmware never re-uses slot numbers, so leftover subs from an old
     # ha_fab keep accumulating until something deletes them. We sweep them
@@ -446,20 +456,25 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     failures are logged but never block removal.
     """
     ir.async_delete_issue(hass, DOMAIN, f"unenrolled_devices_{entry.entry_id}")
+    enrolled_hosts = hass.data.get(DATA_ENROLLED_HOSTS, {}).pop(entry.entry_id, {})
     if entry.data.get("flow_kind") != "cloud":
         return
     group_id = entry.data.get(CONF_GROUP_ID)
     group_key = entry.data.get(CONF_GROUP_KEY)
     ha_fab = entry.data.get(CONF_HA_FAB)
-    static_ips = {
+    # Where the appliances were when this run last enrolled them wins over a
+    # configured address; an entry that never loaded in this run only has
+    # the configured ones.
+    hosts = {
         **(entry.data.get(CONF_STATIC_IPS) or {}),
         **(entry.options.get(CONF_STATIC_IPS) or {}),
+        **enrolled_hosts,
     }
-    if not (group_id and group_key and ha_fab and static_ips):
+    if not (group_id and group_key and ha_fab and hosts):
         return
     import json as _json
 
-    for fab, ip in static_ips.items():
+    for fab, ip in hosts.items():
         try:
             async with MieleLanClient.from_hex(
                 ip, group_id, group_key, fab, timeout=6.0

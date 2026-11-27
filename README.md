@@ -281,7 +281,7 @@ Create automations as usual under **Settings** > **Automations & scenes**.
 - **One Home Assistant per household.** If two Home Assistant installs run Miele@LAN on the same appliances, each one removes the other's registration from the appliances when it starts. The other install then loses its instant updates and falls back to checking on a timer.
 - **No firmware updates.** Miele@LAN does not update the appliance's firmware.
 - **Moving from the official Miele integration?** Entity names are different, so check your automations and dashboards after the switch.
-- **Removing Miele@LAN** tries to remove Home Assistant's registration from the appliances whose IP address it has stored (set up with GroupID + GroupKey, or with static IP addresses). Leftover registrations are cleared automatically the next time Miele@LAN is set up.
+- **Removing Miele@LAN** tries to remove Home Assistant's registration from every appliance it has reached since Home Assistant started. An appliance that is switched off or out of reach at that moment keeps the registration. Leftover registrations are cleared automatically the next time Miele@LAN is set up.
 
 ## Troubleshooting & FAQ
 

@@ -6,6 +6,8 @@ from enum import IntEnum
 from typing import Any
 
 DOMAIN = "miele_lan"
+# hass.data key: entry_id -> {fab: host} of the appliances enrolled in this run.
+DATA_ENROLLED_HOSTS = f"{DOMAIN}_enrolled_hosts"
 DEFAULT_NAME = "Miele@LAN"
 DEFAULT_TIMEOUT = 10.0
 
