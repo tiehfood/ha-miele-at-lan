@@ -10,8 +10,6 @@ import time
 from pathlib import Path
 from types import MappingProxyType
 
-import pytest
-
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -159,7 +157,7 @@ def test_first_refresh_waits_for_the_slowest_appliance_not_the_sum(monkeypatch) 
     assert list(bundle["coordinators"]) == [WASHER, DRYER]
 
 
-def test_a_failed_first_refresh_lets_the_others_finish_before_closing_clients(
+def test_a_failed_first_refresh_lets_the_others_finish_before_closing_its_client(
     monkeypatch,
 ) -> None:
     async def _refresh(fab: str) -> None:
@@ -167,16 +165,23 @@ def test_a_failed_first_refresh_lets_the_others_finish_before_closing_clients(
             raise ConfigEntryNotReady("HTTP error 404: API error for /State")
         await asyncio.sleep(SLOW)
 
+    class _Watcher:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        async def async_start(self) -> None:
+            return None
+
     events = _patch_setup(monkeypatch, refresh=_refresh)
+    monkeypatch.setattr(miele_lan, "MissedApplianceWatcher", _Watcher)
+    hass = _Hass()
 
-    with pytest.raises(ConfigEntryNotReady):
-        asyncio.run(miele_lan._setup_cloud(_Hass(), _Entry()))
+    assert asyncio.run(miele_lan._setup_cloud(hass, _Entry())) is True
 
-    # The dryer's refresh was still using its client: it must finish before
-    # setup tears the clients down.
-    assert events == [
-        f"refreshed {DRYER}", "closed 203.0.113.1", "closed 203.0.113.2",
-    ]
+    # The washer is left out (see test_setup_partial_failure.py), but only
+    # once every other refresh has finished; the dryer keeps its client.
+    assert events == [f"refreshed {DRYER}", "closed 203.0.113.1"]
+    assert list(hass.data[miele_lan.DOMAIN]["entry1"]["coordinators"]) == [DRYER]
 
 
 def test_setup_does_not_wait_for_the_stale_subscription_sweep(monkeypatch) -> None:
