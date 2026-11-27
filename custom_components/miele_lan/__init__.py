@@ -41,6 +41,7 @@ from .const import (
 from .coordinator import MieleLanCoordinator
 from .enrollment import (
     DeviceIpResolver,
+    EnrolledDevice,
     cleanup_stale_subscriptions,
     enroll_all,
     mdns_discover_household,
@@ -323,7 +324,7 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # firmware never re-uses slot numbers, so leftover subs from an old
     # ha_fab keep accumulating until something deletes them. We sweep them
     # on every entry setup so reload-recovery is automatic.
-    for ed in enrolled:
+    async def _cleanup(ed: EnrolledDevice) -> None:
         try:
             n = await cleanup_stale_subscriptions(
                 host_ip=ed.host_ip, fab=ed.fab,
@@ -335,7 +336,12 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("[%s] stale-sub cleanup at setup failed: %s", ed.fab, err)
 
+    # Appliances are independent: clean up and do the first refresh of all of
+    # them at once, so setup waits for the slowest appliance, not the sum.
+    await asyncio.gather(*(_cleanup(ed) for ed in enrolled))
+
     try:
+        coords: dict[str, MieleLanCoordinator] = {}
         for ed in enrolled:
             client = MieleLanClient.from_hex(
                 host=ed.host_ip,
@@ -345,9 +351,26 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
             await client.__aenter__()
             bundle["clients"].append(client)
-            coord = MieleLanCoordinator(hass, entry, client, fab=ed.fab, enrollment=ed)
+            coords[ed.fab] = MieleLanCoordinator(hass, entry, client, fab=ed.fab, enrollment=ed)
+
+        async def _first_refresh(fab: str, coord: MieleLanCoordinator) -> None:
             await coord.async_config_entry_first_refresh()
-            bundle["coordinators"][ed.fab] = coord
+            # Registered as soon as it has data, so pushes reach it right away.
+            bundle["coordinators"][fab] = coord
+
+        # return_exceptions: let every refresh finish before the cleanup below
+        # closes the clients, then re-raise the first failure as before.
+        errors = [
+            r for r in await asyncio.gather(
+                *(_first_refresh(fab, c) for fab, c in coords.items()),
+                return_exceptions=True,
+            )
+            if isinstance(r, BaseException)
+        ]
+        if errors:
+            raise errors[0]
+        # Keep the enrollment order, whatever order the refreshes finished in.
+        bundle["coordinators"] = {fab: bundle["coordinators"][fab] for fab in coords}
     except Exception:
         # Any failure here would otherwise leak the listener and all
         # already-opened clients — see issue #2's NotRunningException loop.

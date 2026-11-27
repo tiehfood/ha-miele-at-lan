@@ -21,6 +21,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
+from typing import Any
 
 import aiohttp
 
@@ -249,6 +250,26 @@ async def enroll_device(
     )
 
 
+async def _list_subscription_slots(client: Any) -> list[int] | None:
+    """Slot numbers from one signed `GET /Subscriptions/`, or None if the
+    appliance does not answer it with a JSON object.
+
+    Seen on WWV980, TWV680WP and PG8133 firmware: the body maps each live slot
+    number to its entry, e.g. `{"1": {...}, "2": {...}}`, or `{}` when empty.
+    """
+    try:
+        status, body = await client.raw._request_bytes(
+            "GET", "/Subscriptions/", allowed_status=(200,),
+        )
+        listing = json.loads(body.decode("utf-8", errors="replace").strip() or "{}")
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("GET /Subscriptions/ listing failed, scanning slots: %s", err)
+        return None
+    if status != 200 or not isinstance(listing, dict):
+        return None
+    return sorted(int(k) for k in listing if str(k).isdigit())
+
+
 async def cleanup_stale_subscriptions(
     *,
     host_ip: str,
@@ -277,11 +298,14 @@ async def cleanup_stale_subscriptions(
         client = MieleLanClient.from_hex(host_ip, group_id_hex, group_key_hex, fab,
                                           timeout=6.0)
         async with client as c:
-            # Slot IDs are monotonic, never reused, so we scan a wide range
-            # (live observation: typical max ≤ 32). Stop once we've seen many
+            listed = await _list_subscription_slots(c)
+            # `GET /Subscriptions/` names every live slot in one request. Only
+            # if an appliance does not answer it, fall back to probing slot
+            # numbers: they are monotonic and never reused, so scan a wide
+            # range (live observation: typical max ≤ 32) and stop after many
             # consecutive 404s to bound the scan.
             misses = 0
-            for n in range(1, 64):
+            for n in listed if listed is not None else range(1, 64):
                 try:
                     st, body = await c.raw._request_bytes(
                         "GET", f"/Subscriptions/{n}/",

@@ -88,3 +88,71 @@ def test_resolver_answers_unknown_fab_without_an_mdns_browse() -> None:
     assert known == "203.0.113.1"
     assert unknown is None
     assert elapsed < 0.1
+
+
+class _FakeRaw:
+    def __init__(self, listing: bytes | None, live: dict[int, str]) -> None:
+        self._listing = listing
+        self._live = live
+        self.requests: list[tuple[str, str]] = []
+
+    async def _request_bytes(self, method, resource, allowed_status=(200,), body=None):
+        self.requests.append((method, resource))
+        if resource == "/Subscriptions/":
+            if self._listing is None:
+                raise RuntimeError("no listing on this firmware")
+            return 200, self._listing
+        n = int(resource.strip("/").split("/")[-1])
+        if method == "GET":
+            return (200, self._live[n].encode()) if n in self._live else (404, b"")
+        self._live.pop(n, None)
+        return 204, b""
+
+
+class _FakeClient:
+    def __init__(self, raw: _FakeRaw) -> None:
+        self.raw = raw
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return None
+
+
+def _cleanup(monkeypatch, listing, live):
+    raw = _FakeRaw(listing, live)
+    monkeypatch.setattr(
+        enrollment_mod.MieleLanClient, "from_hex",
+        classmethod(lambda cls, *a, **k: _FakeClient(raw)),
+    )
+    deleted = asyncio.run(enrollment_mod.cleanup_stale_subscriptions(
+        host_ip="203.0.113.1", fab="000000000001",
+        group_id_hex="00" * 8, group_key_hex="00" * 64, our_ha_fab="000999000001",
+    ))
+    return deleted, raw
+
+
+OURS = '{"Callback":"http://Miele-x.local.:18082/Devices/000999000001/SuperVision/1/State/"}'
+STALE = '{"Callback":"http://Miele-y.local.:18082/Devices/000999000002/SuperVision/1/State/"}'
+
+
+def test_cleanup_reads_only_the_listed_slots(monkeypatch) -> None:
+    listing = b'{\n\t"1":{"href":"1/"},\n\t"7":{"href":"7/"}\n}  '
+    deleted, raw = _cleanup(monkeypatch, listing, {1: OURS, 7: STALE})
+
+    assert deleted == 1
+    assert raw.requests == [
+        ("GET", "/Subscriptions/"),
+        ("GET", "/Subscriptions/1/"),
+        ("GET", "/Subscriptions/7/"),
+        ("DELETE", "/Subscriptions/7/"),
+    ]
+
+
+def test_cleanup_scans_slot_numbers_when_the_listing_fails(monkeypatch) -> None:
+    deleted, raw = _cleanup(monkeypatch, None, {1: OURS, 7: STALE})
+
+    assert deleted == 1
+    gets = [r for m, r in raw.requests if m == "GET" and r != "/Subscriptions/"]
+    assert len(gets) == 7 + 16  # up to the last live slot, then 16 misses
