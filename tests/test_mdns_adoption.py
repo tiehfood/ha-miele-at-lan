@@ -99,6 +99,7 @@ def test_enroll_all_warns_and_skips_worklist_entry_with_no_fab_key(
             ha_hostname="ha.local.",
             ha_port=12345,
             resolver=_NeverCalledResolver(),
+            session=None,
         ))
 
     assert result.enrolled == []

@@ -17,13 +17,13 @@ import logging
 import secrets
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
 from homeassistant.const import CONF_HOST
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import MieleLanClient
 from .cloud import (
@@ -121,10 +121,9 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Pick the country whose Miele cloud tenant we'll auth against."""
         if user_input is not None:
             cc = user_input[CONF_COUNTRY]
-            async with aiohttp.ClientSession() as session:
-                self._authorize_url, self._challenge = await async_build_authorize_url(
-                    session, cc
-                )
+            self._authorize_url, self._challenge = await async_build_authorize_url(
+                async_get_clientsession(self.hass), cc
+            )
             return await self.async_step_cloud_authorize()
         return self.async_show_form(
             step_id="cloud_country",
@@ -175,28 +174,28 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _finalise_cloud(self, code: str) -> FlowResult:
         """Exchange the code, fetch the household, create the config entry."""
         assert self._challenge is not None
-        async with aiohttp.ClientSession() as session:
-            try:
-                tokens = await exchange_code(session, self._challenge, code)
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.warning("token exchange failed: %s", err)
-                return self.async_abort(reason="oauth_failed")
-            access = tokens.get("access_token")
-            refresh = tokens.get("refresh_token")
-            if not access or not refresh:
-                return self.async_abort(reason="oauth_failed")
-            try:
-                # No region argument: let fetch_groupkey find the backend that
-                # actually holds this household, and record what it settled on.
-                # The LAN groups pick the right household if the account owns
-                # more than one.
-                groupkey = await fetch_groupkey(
-                    session, access, cc=self._challenge.cc,
-                    prefer_group_ids=await self._lan_group_ids(),
-                )
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.warning("GroupKey fetch failed: %s", err)
-                return self.async_abort(reason="groupkey_failed")
+        session = async_get_clientsession(self.hass)
+        try:
+            tokens = await exchange_code(session, self._challenge, code)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("token exchange failed: %s", err)
+            return self.async_abort(reason="oauth_failed")
+        access = tokens.get("access_token")
+        refresh = tokens.get("refresh_token")
+        if not access or not refresh:
+            return self.async_abort(reason="oauth_failed")
+        try:
+            # No region argument: let fetch_groupkey find the backend that
+            # actually holds this household, and record what it settled on.
+            # The LAN groups pick the right household if the account owns
+            # more than one.
+            groupkey = await fetch_groupkey(
+                session, access, cc=self._challenge.cc,
+                prefer_group_ids=await self._lan_group_ids(),
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("GroupKey fetch failed: %s", err)
+            return self.async_abort(reason="groupkey_failed")
         # One config entry per household. unique_id = household group_id.
         await self.async_set_unique_id(groupkey.group_id)
         self._abort_if_unique_id_configured()
@@ -230,15 +229,14 @@ class MieleLanConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not access or not refresh:
                 errors["base"] = "invalid_token"
             else:
-                async with aiohttp.ClientSession() as session:
-                    try:
-                        groupkey = await fetch_groupkey(
-                            session, access, cc=cc,
-                            prefer_group_ids=await self._lan_group_ids(),
-                        )
-                    except Exception as err:  # noqa: BLE001
-                        _LOGGER.warning("GroupKey fetch failed: %s", err)
-                        return self.async_abort(reason="groupkey_failed")
+                try:
+                    groupkey = await fetch_groupkey(
+                        async_get_clientsession(self.hass), access, cc=cc,
+                        prefer_group_ids=await self._lan_group_ids(),
+                    )
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning("GroupKey fetch failed: %s", err)
+                    return self.async_abort(reason="groupkey_failed")
                 await self.async_set_unique_id(groupkey.group_id)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(

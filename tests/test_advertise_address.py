@@ -128,6 +128,7 @@ def _run_setup_cloud(monkeypatch, entry: _FakeEntry) -> dict:
         return EnrollmentResult(enrolled=[], failed=[])
 
     monkeypatch.setattr(miele_lan, "enroll_all", _fake_enroll_all)
+    monkeypatch.setattr(miele_lan, "async_get_clientsession", lambda hass: None)
 
     hass = _FakeHass()
     with pytest.raises(ConfigEntryNotReady):

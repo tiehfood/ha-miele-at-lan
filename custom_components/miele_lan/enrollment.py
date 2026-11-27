@@ -129,6 +129,7 @@ async def enroll_device(
     ha_fab: str,
     ha_hostname: str,
     ha_port: int,
+    session: aiohttp.ClientSession,
 ) -> EnrolledDevice | FailedDevice:
     """Run the full enrollment dance against one appliance.
 
@@ -198,34 +199,33 @@ async def enroll_device(
         return FailedDevice(fab=fab, reason=f"enrollment failed: {err}")
 
     # 3. Subscriptions — POST /Subscriptions to register our callback URLs.
-    async with aiohttp.ClientSession() as session:
-        ok_resources: list[str] = []
-        for res in PUSH_RESOURCES:
-            full_resource = f"/Devices/{fab}{res}"
-            callback = (
-                f"http://{ha_hostname}:{ha_port}"
-                f"/Devices/{ha_fab}/SuperVision/{fab}{res}"
+    ok_resources: list[str] = []
+    for res in PUSH_RESOURCES:
+        full_resource = f"/Devices/{fab}{res}"
+        callback = (
+            f"http://{ha_hostname}:{ha_port}"
+            f"/Devices/{ha_fab}/SuperVision/{fab}{res}"
+        )
+        try:
+            status, location = await _signed_subscription_post(
+                session,
+                host_ip=host_ip,
+                full_resource=full_resource,
+                callback_url=callback,
+                group_id_hex=group_id_hex,
+                group_key_hex=group_key_hex,
             )
-            try:
-                status, location = await _signed_subscription_post(
-                    session,
-                    host_ip=host_ip,
-                    full_resource=full_resource,
-                    callback_url=callback,
-                    group_id_hex=group_id_hex,
-                    group_key_hex=group_key_hex,
-                )
-            except Exception as err:
-                _LOGGER.warning("[%s] subscription POST for %s failed: %s", fab, res, err)
-                continue
-            if 200 <= status < 300:
-                ok_resources.append(res)
-                _LOGGER.debug(
-                    "[%s] /Subscriptions for %s → %d (slot=%s)",
-                    fab, res, status, location,
-                )
-            else:
-                _LOGGER.warning("[%s] /Subscriptions for %s → %d", fab, res, status)
+        except Exception as err:
+            _LOGGER.warning("[%s] subscription POST for %s failed: %s", fab, res, err)
+            continue
+        if 200 <= status < 300:
+            ok_resources.append(res)
+            _LOGGER.debug(
+                "[%s] /Subscriptions for %s → %d (slot=%s)",
+                fab, res, status, location,
+            )
+        else:
+            _LOGGER.warning("[%s] /Subscriptions for %s → %d", fab, res, status)
 
     if sv_ok and ok_resources:
         _LOGGER.info("[%s @ %s] enrolled (push-capable) — routes: %s",
@@ -335,6 +335,7 @@ async def enroll_all(
     ha_hostname: str,
     ha_port: int,
     resolver: "DeviceIpResolver",
+    session: aiohttp.ClientSession,
 ) -> EnrollmentResult:
     """Enroll every cloud-listed device that we can reach on the LAN.
 
@@ -368,6 +369,7 @@ async def enroll_all(
             ha_fab=ha_fab,
             ha_hostname=ha_hostname,
             ha_port=ha_port,
+            session=session,
         )
         if isinstance(result, EnrolledDevice):
             enrolled.append(result)

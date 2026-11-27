@@ -22,6 +22,7 @@ from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import MieleLanClient
 from .const import (
@@ -301,6 +302,7 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             ha_hostname=listener.hostname,
             ha_port=ha_port,
             resolver=resolver,
+            session=async_get_clientsession(hass),
         )
     except Exception:
         await _safe_stop_listener(listener)
