@@ -278,6 +278,7 @@ Create automations as usual under **Settings** > **Automations & scenes**.
 - **Washing machines and dryers are never woken** by Home Assistant's background checks.
   To read consumable levels, Home Assistant may wake a dishwasher's network module. If your dishwasher switches itself on, please [open an issue](https://github.com/tiehfood/ha-miele-at-lan/issues).
 - **One household per Home Assistant.** Miele@LAN supports one Miele household per Home Assistant install.
+- **One Home Assistant per household.** If two Home Assistant installs run Miele@LAN on the same appliances, each one removes the other's registration from the appliances when it starts. The other install then loses its instant updates and falls back to checking on a timer.
 - **No firmware updates.** Miele@LAN does not update the appliance's firmware.
 - **Moving from the official Miele integration?** Entity names are different, so check your automations and dashboards after the switch.
 - **Removing Miele@LAN** tries to remove Home Assistant's registration from the appliances whose IP address it has stored (set up with GroupID + GroupKey, or with static IP addresses). Leftover registrations are cleared automatically the next time Miele@LAN is set up.
