@@ -42,12 +42,14 @@ from .coordinator import MieleLanCoordinator
 from .enrollment import (
     DeviceIpResolver,
     EnrolledDevice,
+    _signed_get_fabs,
     cleanup_stale_subscriptions,
     enroll_all,
     mdns_discover_household,
     mdns_household_ids,
 )
 from .enrollment_report import issue_translation_placeholders, summary_line
+from .recovery import MissedApplianceWatcher
 from .push_listener import (
     MielePushListener,
     PushEvent,
@@ -254,6 +256,9 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     event.peer_fab, sorted(expected_fabs),
                 )
             else:
+                watcher = bundle.get("recovery")
+                if watcher is not None and watcher.notify_push(event.peer_fab):
+                    return  # a missed appliance is back; the watcher reloads
                 _LOGGER.log(
                     level,
                     "push for unknown fab %s — no coordinator (known: %s)",
@@ -434,6 +439,29 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_create_background_task(
         hass, _cleanup_all(), f"{DOMAIN} stale-subscription cleanup"
     )
+
+    # Appliances setup could not enrol (off, asleep, flaky Wi-Fi) come back
+    # through a reload once they are reachable, instead of staying unavailable
+    # until the user reloads by hand.
+    missing = expected_fabs - set(bundle["coordinators"])
+    if missing:
+        watcher = MissedApplianceWatcher(
+            hass=hass,
+            entry_id=entry.entry_id,
+            missing_fabs=missing,
+            enrolled_ips={ed.host_ip for ed in enrolled},
+            group_id=group_id,
+            exclude_ha_fab=ha_fab,
+            probe=lambda ip: _signed_get_fabs(
+                ip=ip, group_id_hex=group_id, group_key_hex=group_key,
+            ),
+            zeroconf=shared_zc,
+            create_task=lambda coro, name: entry.async_create_background_task(
+                hass, coro, name
+            ),
+        )
+        bundle["recovery"] = watcher
+        await watcher.async_start()
     return True
 
 
@@ -467,6 +495,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     options_unsub = bundle.get("options_unsub")
     if options_unsub is not None:
         options_unsub()
+    watcher = bundle.get("recovery")
+    if watcher is not None:
+        await watcher.async_stop()
     listener = bundle.get("listener")
     if listener is not None:
         await listener.stop()
