@@ -72,7 +72,7 @@ Some diagnostic sensors are turned off by default. To turn one on, open the devi
 **Notes**
 
 1. The KMDA7876 hob with built-in extractor also shows **Extractor speed** (Off, 1–3, Boost) and a read-only **Extractor** fan. You cannot change the extractor from Home Assistant.
-2. These values only exist where the appliance's firmware shares them. They show up on their own after setup, as soon as the appliance first answers, so they can take a while to appear. Lifetime energy and water totals have been seen on G7655, G7197 and G7650 dishwashers and on WEJ885 and WCI660 washing machines; a lifetime energy total on the TEL785WP tumble dryer. Per-programme energy and water use exist for the WMV960 washing machine and the G6992 dishwasher.
+2. These values only exist where the appliance's firmware shares them. They show up on their own after setup, as soon as the appliance first answers, so they can take a while to appear. Lifetime energy and water totals have been seen on G7655, G7197 and G7650 dishwashers and on WEJ885 and WCI660 washing machines; a lifetime energy total on the TEL785WP tumble dryer. Per-programme energy and water use exist for older washing machines (checked on a WMV960) and the G6992 dishwasher.
 3. The **Programme** list appears only on dishwashers that share their programme list (for example a G7655). See [Choosing a dishwasher programme](#choosing-a-dishwasher-programme).
 4. Washing machines and dryers have no Power switch.
 5. Miele does not allow changing settings on fridges, freezers and wine cabinets over the home network. You can watch them, but not change temperatures or switch SuperCool or SuperFreeze. Changes you make in the Miele app still show up in Home Assistant right away. Wine cabinets that report their interior light also get a **Light** entity. Whether switching it works has not been confirmed yet.
@@ -254,7 +254,7 @@ You can only choose a programme while the dishwasher is on and not running.
 Some appliances report how much energy and water they use:
 
 - **Lifetime energy consumption** and **Lifetime water consumption**: dishwashers and washing machines that share this data (seen on G7655, G7197 and G7650 dishwashers and on WEJ885 and WCI660 washing machines). Tumble dryers that share it get the energy total only (seen on a TEL785WP). A washing machine or dryer is not woken to read them, so they update while it is on.
-- **Energy consumption** and **Water consumption** per programme: WMV960 washing machine and G6992 dishwasher.
+- **Energy consumption** and **Water consumption** per programme: older washing machines that have no lifetime totals (checked on a WMV960) and the G6992 dishwasher. Tumble dryers of that generation do not report their energy use.
 
 To add them, go to **Settings** > **Dashboards** > **Energy**. Add the energy sensor under **Individual devices** and the water sensor under **Water consumption**.
 

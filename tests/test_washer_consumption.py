@@ -1,5 +1,6 @@
-"""WMV960 washer energy and water counters decoded from `/State.ExtendedState`.
+"""Washer energy and water counters decoded from `/State.ExtendedState`.
 
+Washing machines on the old protocol (ProtocolVersion 2) share one layout.
 The two captures in fixtures/wmv960_washer.json come from a WMV960 WPS
 (XKM3100W, firmware 02.72) running a 60 C cotton cycle. Water was compared
 with the Miele app while it rose from 23 to 68 litres and energy went from
@@ -18,8 +19,8 @@ from custom_components.miele_lan import sensor
 from custom_components.miele_lan.const import DOMAIN, MieleAppliance
 from custom_components.miele_lan.coordinator import MieleLanCoordinator, MieleLanData
 from custom_components.miele_lan.extended_state import (
-    parse_wmv960_energy_kwh,
-    parse_wmv960_water_litres,
+    parse_dop1_washer_energy_kwh,
+    parse_dop1_washer_water_litres,
 )
 
 SAMPLES = json.loads(
@@ -29,22 +30,22 @@ SAMPLES = json.loads(
 
 @pytest.mark.parametrize("sample", SAMPLES, ids=lambda sample: sample["label"])
 def test_captured_counters(sample):
-    assert parse_wmv960_energy_kwh(sample["ExtendedState"]) == sample["energy_kwh"]
-    assert parse_wmv960_water_litres(sample["ExtendedState"]) == sample["water_litres"]
+    assert parse_dop1_washer_energy_kwh(sample["ExtendedState"]) == sample["energy_kwh"]
+    assert parse_dop1_washer_water_litres(sample["ExtendedState"]) == sample["water_litres"]
 
 
 @pytest.mark.parametrize("value", [None, 0, "", "xx", "00" * 16, "00" * 66, "00" * 68])
 def test_invalid_or_different_layout_is_unknown(value):
-    assert parse_wmv960_energy_kwh(value) is None
-    assert parse_wmv960_water_litres(value) is None
+    assert parse_dop1_washer_energy_kwh(value) is None
+    assert parse_dop1_washer_water_litres(value) is None
 
 
 def test_counters_are_big_endian_u16():
     payload = bytearray(67)
     payload[50:52] = (1234).to_bytes(2, "big")
     payload[52:54] = (321).to_bytes(2, "big")
-    assert parse_wmv960_energy_kwh(payload.hex()) == 123.4
-    assert parse_wmv960_water_litres(payload.hex()) == 321
+    assert parse_dop1_washer_energy_kwh(payload.hex()) == 123.4
+    assert parse_dop1_washer_water_litres(payload.hex()) == 321
 
 
 def test_sensor_descriptions_are_total_increasing_with_energy_and_water_classes():
@@ -64,14 +65,18 @@ def make_coordinator(tmp_path, monkeypatch):
     # Production coordinator currently relies on HA's config-entry ContextVar.
     monkeypatch.setattr(frame, "report_usage", lambda *args, **kwargs: None)
 
-    def make(model="WMV960", device_type=MieleAppliance.WASHING_MACHINE):
+    def make(model="WMV960", device_type=MieleAppliance.WASHING_MACHINE, protocol_version=2):
         hass = HomeAssistant(str(tmp_path))
         coord = MieleLanCoordinator(
             hass, SimpleNamespace(entry_id="test", async_on_unload=lambda unsub: None),
             SimpleNamespace(route="test-washer", host="192.0.2.1"), "test-washer",
         )
         coord._data = MieleLanData(
-            ident={"tech_type": model, "device_type": device_type},
+            ident={
+                "tech_type": model,
+                "device_type": device_type,
+                "protocol_version": protocol_version,
+            },
             state={"Status": 7, "ExtendedState": SAMPLES[1]["ExtendedState"]},
         )
         coord.data = coord._data
@@ -82,17 +87,20 @@ def make_coordinator(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model,device_type,expected", [
-    ("WMV960", MieleAppliance.WASHING_MACHINE, True),
-    ("wmv 960", MieleAppliance.WASHING_MACHINE, True),
-    ("WEC395", MieleAppliance.WASHING_MACHINE, False),
-    ("WMV961", MieleAppliance.WASHING_MACHINE, False),
-    ("", MieleAppliance.WASHING_MACHINE, False),
-    ("WMV960", MieleAppliance.WASHER_DRYER, False),
-    ("WMV960", MieleAppliance.TUMBLE_DRYER, False),
+@pytest.mark.parametrize("model,device_type,protocol_version,expected", [
+    ("WMV960", MieleAppliance.WASHING_MACHINE, 2, True),
+    ("WMG823", MieleAppliance.WASHING_MACHINE, 2, True),
+    ("WMG823", MieleAppliance.WASHING_MACHINE, "2", True),
+    ("", MieleAppliance.WASHING_MACHINE, 2, True),
+    ("WEJ885", MieleAppliance.WASHING_MACHINE, 4, False),
+    ("WMV960", MieleAppliance.WASHING_MACHINE, None, False),
+    ("WMV960", MieleAppliance.WASHER_DRYER, 2, False),
+    ("TMM843WP", MieleAppliance.TUMBLE_DRYER, 2, False),
 ])
-async def test_real_entity_selection(make_coordinator, model, device_type, expected):
-    hass, coord = make_coordinator(model, device_type)
+async def test_real_entity_selection(
+    make_coordinator, model, device_type, protocol_version, expected
+):
+    hass, coord = make_coordinator(model, device_type, protocol_version)
     entities = []
     await sensor.async_setup_entry(hass, SimpleNamespace(entry_id="test", async_on_unload=lambda unsub: None), entities.extend)
     by_id = {e.unique_id: e for e in entities}

@@ -194,13 +194,16 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
 
     @property
     def washer_consumption_supported(self) -> bool:
-        """Whether this model has a verified energy/water ExtendedState layout.
+        """Whether this washer sends the energy/water ExtendedState layout.
 
-        Only WMV960 has been captured. Other washing machines can use a
-        different payload, so do not enable this for unverified models.
+        The Miele app reads one layout for every washing machine on the old
+        protocol (ProtocolVersion 2), washer-dryers excepted. Washing
+        machines on DOP2 are read through 2/1585 instead.
         """
-        model = model_name(self._data.ident)
-        return self.device_type is MieleAppliance.WASHING_MACHINE and model == "WMV960"
+        return (
+            self.device_type is MieleAppliance.WASHING_MACHINE
+            and self.protocol_version == 2
+        )
 
     @property
     def dishwasher_consumption_supported(self) -> bool:

@@ -36,14 +36,14 @@ from . import enums
 from .extended_state import (
     EXTRACTOR_SPEED_LABELS,
     hob_zone_count,
+    parse_dop1_washer_energy_kwh,
+    parse_dop1_washer_water_litres,
     parse_g6992_energy_kwh,
     parse_g6992_water_litres,
     parse_h6800bmx_cavity_temperature,
     parse_h6800bmx_core_temperature,
     parse_hob_extended_state,
     parse_kmda7876_extractor_speed,
-    parse_wmv960_energy_kwh,
-    parse_wmv960_water_litres,
 )
 from .const import (
     COOLING_FAMILY,
@@ -313,25 +313,23 @@ def _progress_percent(state: dict[str, Any]) -> int | None:
 
 
 def _energy_consumption(data: MieleLanData) -> float | None:
-    """Cycle energy in kWh from the model's ExtendedState layout."""
+    """Cycle energy in kWh from the appliance's ExtendedState layout.
+
+    The sensor only exists for a G6992 dishwasher or a washing machine on the
+    old protocol, see the two consumption gates on the coordinator.
+    """
     extended = data.state.get("ExtendedState")
-    model = model_name(data.ident)
-    if model == "WMV960":
-        return parse_wmv960_energy_kwh(extended)
-    if model == "G6992":
+    if model_name(data.ident) == "G6992":
         return parse_g6992_energy_kwh(extended)
-    return None
+    return parse_dop1_washer_energy_kwh(extended)
 
 
 def _water_consumption(data: MieleLanData) -> float | None:
-    """Cycle water in litres from the model's ExtendedState layout."""
+    """Cycle water in litres, picked like `_energy_consumption`."""
     extended = data.state.get("ExtendedState")
-    model = model_name(data.ident)
-    if model == "WMV960":
-        return parse_wmv960_water_litres(extended)
-    if model == "G6992":
+    if model_name(data.ident) == "G6992":
         return parse_g6992_water_litres(extended)
-    return None
+    return parse_dop1_washer_water_litres(extended)
 
 
 def _oven_core_temperature(data: MieleLanData) -> int | float | None:
@@ -681,9 +679,9 @@ SENSOR_TYPES: tuple[MieleLanSensorDef, ...] = (
         ),
     ),
     # Cycle energy and water consumption from the ExtendedState of a washer or
-    # a dishwasher. Model-gated (see washer_consumption_supported and
-    # dishwasher_consumption_supported): the layouts have only been verified
-    # on a WMV960 and a G6992. Not status-gated on purpose: while the machine is
+    # a dishwasher. Gated (see washer_consumption_supported and
+    # dishwasher_consumption_supported): washing machines on the old protocol
+    # and the G6992. Not status-gated on purpose: while the machine is
     # on, the firmware keeps the finished cycle's totals until the next
     # programme is selected, which is what a total_increasing sensor needs (a
     # drop to a smaller value on the next cycle is read as a reset). Once the
