@@ -186,6 +186,27 @@ def test_async_build_uses_own_endpoint():
     assert ch.client_id == ECHOED_ID
 
 
+def test_authorize_url_keeps_a_query_the_endpoint_already_has():
+    # Importer countries (Israel, #96): /V3/Locales names `...authorize?login_hint=IL`.
+    il_authorize = PL_AUTHORIZE + "?login_hint=IL"
+    s = FakeSession(
+        {
+            "locales": _Resp(200, _locales(il_authorize, PL_TOKEN)),
+            il_authorize: _Resp(302, None, {"Location": f"https://idp.example/err?client_id={ECHOED_ID}"}),
+        }
+    )
+    url, ch = _run(cloud.async_build_authorize_url(s, "il"))
+    assert url.startswith(il_authorize + "&client_id=" + ECHOED_ID + "&")
+    assert url.count("?") == 1
+    assert ch.token_url == PL_TOKEN
+    assert ch.cc == "il"
+
+
+def test_israel_can_be_selected():
+    assert "il" in cloud.CONSUMER_CLIENT_IDS
+    assert cloud.region_candidates("il")[0] == "EU"
+
+
 def test_async_build_keeps_map_when_lookup_fails():
     s = FakeSession({"locales": ConnectionError("down")})
     url, ch = _run(cloud.async_build_authorize_url(s, "de"))

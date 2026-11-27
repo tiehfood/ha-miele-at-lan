@@ -163,7 +163,7 @@ Do this step on a **desktop computer with Chrome or Edge** (Firefox works too).
 
 1. Choose **Cloud pairing (recommended — uses your Miele account, doesn't break the Miele app)**.
 2. Pick the **Country** your Miele account is registered in, and select **Submit**.
-   This is the country you chose when you created the account. It is not always the country you live in now. [My country is not in the list](#my-country-is-not-in-the-list) under Troubleshooting lists the 49 choices.
+   This is the country you chose when you created the account. It is not always the country you live in now. [My country is not in the list](#my-country-is-not-in-the-list) under Troubleshooting lists the choices.
 3. Home Assistant shows a link called **Open the authorization URL**. Before you open it:
    1. Open the browser's developer tools: **F12** on Windows and Linux, **Cmd+Option+I** on a Mac.
    2. Select the **Network** tab.
@@ -327,11 +327,11 @@ Check the log (see [Getting help](#getting-help)).
 
 ### My country is not in the list
 
-Pick the country your Miele **account** is registered in. 49 countries are supported:
+Pick the country your Miele **account** is registered in. 50 countries are supported:
 
 ```
-ae at au be bg br ca ch cl cn cy cz de dk ee es fi fr gb gr hk hr hu ie in it jp kr
-lt lu lv mx my nl no nz pl pt ro rs se sg si sk th tr ua us za
+ae at au be bg br ca ch cl cn cy cz de dk ee es fi fr gb gr hk hr hu ie il in it jp
+kr lt lu lv mx my nl no nz pl pt ro rs se sg si sk th tr ua us za
 ```
 
 If yours is missing, use **Paste GroupID + GroupKey**. It does not depend on the country.

@@ -55,6 +55,10 @@ CONSUMER_CLIENT_IDS: dict[str, str] = {
     "hr": "HD4OUUQYAw_5DtVFSe4-rYzR",
     "hu": "2mm2yscHPGJ4tJCVjd6mp-to",
     "ie": "_UU4TA2Iei5eEf0XkYp3ZRKF",
+    # Israel is served by an importer and has no MAP tenant. It logs in at the
+    # endpoint /V3/Locales names (see `resolve_oidc`); this is the id that
+    # endpoint echoes, kept as the fallback for a failed probe.
+    "il": "PicVDy1_KWKIiaU8KB1Ioc24",
     "in": "5KwIy81GoVqNkxkB20OtTNaf",
     "it": "ARQyaYB0ZxLxJ1SJcjJgctuV",
     "jp": "wk4iaS04nYkN4seEsZbKQ2xB",
@@ -109,6 +113,7 @@ GIGYA_DC_BY_COUNTRY: dict[str, str] = {
     "hr": "eu1",
     "hu": "eu1",
     "ie": "eu1",
+    "il": "eu1",  # not probed: /V3/Locales puts Israel on the EU backend
     "in": "eu1",
     "it": "eu1",
     "jp": "us1",
@@ -379,7 +384,9 @@ def build_authorize_url(
         "code_challenge_method": "S256",
     }
     base = authorize_url or f"https://{MAP_HOST}/{cc}/authorize"
-    url = base + "?" + urllib.parse.urlencode(params)
+    # An importer country's endpoint already carries `?login_hint=<ISO>`.
+    separator = "&" if urllib.parse.urlparse(base).query else "?"
+    url = base + separator + urllib.parse.urlencode(params)
     return url, PKCEChallenge(
         verifier=verifier,
         challenge=challenge_hash,
