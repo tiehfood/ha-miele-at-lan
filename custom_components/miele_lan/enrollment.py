@@ -343,26 +343,15 @@ async def enroll_all(
     Devices we can't resolve (offline, mDNS slow, different VLAN) are skipped
     with a WARNING; enrollment can be retried later when they come online.
     """
-    enrolled: list[EnrolledDevice] = []
-    failed: list[FailedDevice] = []
-    for d in devices:
-        fab = d.get("fabNr") or d.get("fab")
-        if not fab:
-            _LOGGER.warning(
-                "enrollment worklist entry has no fab number, skipping: %s", d
-            )
-            continue
+    async def _enroll_one(fab: str) -> EnrolledDevice | FailedDevice:
         host_ip = await resolver.resolve(fab)
         if not host_ip:
-            _LOGGER.warning(
-                "could not resolve LAN IP for %s — will retry next refresh", fab
-            )
-            failed.append(FailedDevice(
+            _LOGGER.warning("could not resolve LAN IP for %s", fab)
+            return FailedDevice(
                 fab=fab,
                 reason="no LAN IP found (mDNS did not answer and no static IP is configured)",
-            ))
-            continue
-        result = await enroll_device(
+            )
+        return await enroll_device(
             fab=fab,
             host_ip=host_ip,
             group_id_hex=group_id_hex,
@@ -372,10 +361,23 @@ async def enroll_all(
             ha_port=ha_port,
             session=session,
         )
-        if isinstance(result, EnrolledDevice):
-            enrolled.append(result)
-        else:
-            failed.append(result)
+
+    fabs: list[str] = []
+    for d in devices:
+        fab = d.get("fabNr") or d.get("fab")
+        if not fab:
+            _LOGGER.warning(
+                "enrollment worklist entry has no fab number, skipping: %s", d
+            )
+            continue
+        fabs.append(fab)
+
+    # Each appliance is independent, and one in standby can take the full
+    # signed-request timeout to answer, so enrolling them one after another
+    # made setup as slow as the sum of every appliance's wait.
+    results = await asyncio.gather(*(_enroll_one(fab) for fab in fabs))
+    enrolled = [r for r in results if isinstance(r, EnrolledDevice)]
+    failed = [r for r in results if isinstance(r, FailedDevice)]
     if failed:
         failed = await _refine_failure_reasons(
             failed, our_group_id=group_id_hex, zeroconf=resolver.zeroconf
@@ -481,22 +483,24 @@ def _decode_txt_group(info: Any) -> str:
 class DeviceIpResolver:
     """Resolve a fab number to a LAN IP.
 
-    Tries (in order): explicit cache → mDNS browse → static config map.
-    Lives outside enroll_all() so the same resolver can be reused for
-    re-enrollment without rebuilding the mDNS browser.
+    Tries (in order): explicit cache → static config map (which setup fills
+    from the mDNS discovery browse).
+
+    There is no per-fab mDNS lookup: a real appliance's hostname is derived
+    from its Wi-Fi MAC (`Miele-<EUI-64>.local.`), which the fab number does
+    not encode, so guessing it from the fab never matched and cost a 4 s
+    browse per unresolved appliance.
     """
 
     def __init__(
         self,
         *,
         static: dict[str, str] | None = None,
-        mdns_timeout: float = 4.0,
         zeroconf: Any | None = None,
     ) -> None:
         self._static = static or {}
         self._cache: dict[str, str] = {}
-        self._mdns_timeout = mdns_timeout
-        # When given, mDNS lookups reuse HA's shared AsyncZeroconf instance
+        # When given, mDNS helpers reuse HA's shared AsyncZeroconf instance
         # instead of spinning up a competing one — avoids the HA frame-helper
         # warning and prevents the two from contesting the same UDP socket on
         # restart-heavy paths (issue #2).
@@ -516,53 +520,7 @@ class DeviceIpResolver:
         if fab in self._static:
             self._cache[fab] = self._static[fab]
             return self._static[fab]
-        ip = await self._mdns_resolve(fab)
-        if ip:
-            self._cache[fab] = ip
-        return ip
-
-    async def _mdns_resolve(self, fab: str) -> str | None:
-        """Browse the Miele service types and find the entry whose hostname
-        encodes this fab number (real Miele hostnames embed the WiFi MAC).
-
-        We don't have a reverse mapping from fab → MAC, so we collect all
-        Miele services on the LAN and match on a synthetic hostname pattern
-        we derive from the fab. If that fails, we fall back to checking each
-        candidate's /Ident response (not implemented yet — best-effort).
-        """
-        try:
-            from zeroconf import IPVersion
-            from zeroconf.asyncio import AsyncServiceBrowser, AsyncZeroconf
-        except ImportError:
-            return None
-
-        from .push_listener import synthetic_mac_hostname
-
-        target_hostname = synthetic_mac_hostname(fab)
-        found_ip: str | None = None
-        owns_zc = self._zc is None
-        zc = self._zc if self._zc is not None else AsyncZeroconf(ip_version=IPVersion.V4Only)
-
-        try:
-            def _on_service(zeroconf, service_type, name, state_change) -> None:  # type: ignore[no-untyped-def]
-                pass  # we'll resolve by direct lookup below
-
-            browser = AsyncServiceBrowser(
-                zc.zeroconf, list(MIELE_SERVICE_TYPES), handlers=[_on_service]
-            )
-            await asyncio.sleep(self._mdns_timeout)
-            await browser.async_cancel()
-
-            for record in zc.zeroconf.cache.entries_with_name(target_hostname.lower()):
-                addr = getattr(record, "address", None)
-                if addr is not None:
-                    found_ip = ".".join(str(b) for b in addr)
-                    break
-        finally:
-            if owns_zc:
-                await zc.async_close()
-
-        return found_ip
+        return None
 
 
 async def mdns_household_ids(
