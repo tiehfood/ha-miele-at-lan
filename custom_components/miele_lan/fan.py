@@ -32,15 +32,20 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import MieleLanCoordinator
 from .entity import MieleLanEntity
-from .extended_state import EXTRACTOR_SPEED_LABELS, parse_kmda7876_extractor_speed
+from .extended_state import (
+    EXTRACTOR_SPEED_LABELS,
+    dop1_hood_has_booster_2,
+    parse_kmda7876_extractor_speed,
+)
 
 # Luefterstufe -> preset label. Step 4 is labeled "Boost" on the appliance,
-# not "level 4". Step 5 (interval ventilation) is a real panel mode but isn't
-# offered here — it's untested over this write path, so it's reported as "no
-# recognized preset" rather than given a label we can't actually set.
-LEVEL_TO_PRESET: dict[int, str] = {1: "1", 2: "2", 3: "3", 4: "boost"}
+# not "level 4". Step 5 is a second booster level; the Miele app offers it
+# only on hoods that report one in their ExtendedState, and so does this
+# entity (see `dop1_hood_has_booster_2`).
+BOOSTER_2_PRESET = "boost_2"
+LEVEL_TO_PRESET: dict[int, str] = {1: "1", 2: "2", 3: "3", 4: "boost", 5: BOOSTER_2_PRESET}
 PRESET_TO_LEVEL: dict[str, int] = {v: k for k, v in LEVEL_TO_PRESET.items()}
-PRESET_MODES: list[str] = list(LEVEL_TO_PRESET.values())
+PRESET_MODES: list[str] = [p for p in LEVEL_TO_PRESET.values() if p != BOOSTER_2_PRESET]
 EXTRACTOR_PERCENTAGES = {
     label: step * 25 for step, label in EXTRACTOR_SPEED_LABELS.items()
 }
@@ -105,7 +110,6 @@ class MieleLanFan(MieleLanEntity, FanEntity):
         | FanEntityFeature.TURN_ON
         | FanEntityFeature.TURN_OFF
     )
-    _attr_preset_modes = PRESET_MODES
     entity_description = FanEntityDescription(
         key="ventilation",
         translation_key="ventilation",
@@ -127,8 +131,15 @@ class MieleLanFan(MieleLanEntity, FanEntity):
         return None if step is None else step > 0
 
     @property
+    def preset_modes(self) -> list[str]:
+        if dop1_hood_has_booster_2(self.coordinator.data.state.get("ExtendedState")):
+            return [*PRESET_MODES, BOOSTER_2_PRESET]
+        return PRESET_MODES
+
+    @property
     def preset_mode(self) -> str | None:
-        return LEVEL_TO_PRESET.get(self._step or 0)
+        preset = LEVEL_TO_PRESET.get(self._step or 0)
+        return preset if preset in self.preset_modes else None
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         await self.coordinator.client.set_fan_level(PRESET_TO_LEVEL[preset_mode])

@@ -1007,7 +1007,7 @@ class MieleLanClient:
             raise HomeAssistantError("Could not connect to the appliance.") from exc
 
     async def set_fan_level(self, level: int) -> None:
-        """Set the hood's ventilation level (0 = off, 1-3, 4 = boost).
+        """Set the hood's ventilation level (0 = off, 1-3, 4 = boost, 5 = boost 2).
 
         Hood-only, and only on ProtocolVersion==2 appliances — the same gate
         the official app applies (see const.py). Returns as soon as the

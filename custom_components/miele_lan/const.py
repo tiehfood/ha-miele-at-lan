@@ -169,7 +169,8 @@ DOP1_REQUEST_TYPE_WRITE = "02"
 # SetFanPowerLevelBaseAction. 4-byte write section:
 #   [0] Struktur_Version  = 0
 #   [1] Luefterauswahl    = 0xFF (all/default fan)
-#   [2] Luefterstufe      = 0..5 (FanPowerLevel: Off, 1, 2, 3, Booster, Interval)
+#   [2] Luefterstufe      = 0..5 (FanPowerLevel: Off, 1, 2, 3, Booster, Interval;
+#                           the app shows 5 as the second booster level)
 #   [3] Luefterleistung   = 0
 # Confirmed live: turning ON takes ~4s before /State.VentilationStep reflects
 # it (motor spin-up); turning OFF is near-instant (<1s). No keep-alive needed.

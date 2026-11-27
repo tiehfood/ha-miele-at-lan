@@ -238,6 +238,36 @@ def parse_dop1_washer_water_litres(hex_str: str | None) -> int | None:
     return _dop1_washer_u16(hex_str, DOP1_WASHER_WATER_OFFSET)
 
 
+# A hood on the old protocol (ProtocolVersion 2) sends the layout the Miele
+# app reads for it: a 3-byte header (appliance type 18, layout version) and
+# the hood's own data, big-endian. The offsets are bytes of the whole blob.
+# Checked on a DAS 4630 (66 bytes), which has a second booster level and
+# reports the bit the app tests before it offers one.
+DOP1_HOOD_APPLIANCE_TYPE = 18
+DOP1_HOOD_FEATURES_2_OFFSET = 37
+DOP1_HOOD_FEATURE_2_BOOSTER_2 = 1 << 7
+
+
+def _dop1_hood_u16(hex_str: str | None, offset: int) -> int | None:
+    if not isinstance(hex_str, str):
+        return None
+    try:
+        payload = bytes.fromhex(hex_str)
+    except ValueError:
+        return None
+    if len(payload) < DOP1_HOOD_FEATURES_2_OFFSET + 2:
+        return None
+    if int.from_bytes(payload[:2], "big") != DOP1_HOOD_APPLIANCE_TYPE:
+        return None
+    return int.from_bytes(payload[offset:offset + 2], "big")
+
+
+def dop1_hood_has_booster_2(hex_str: str | None) -> bool:
+    """Whether the hood reports a second booster level (fan level 5)."""
+    features = _dop1_hood_u16(hex_str, DOP1_HOOD_FEATURES_2_OFFSET)
+    return bool(features and features & DOP1_HOOD_FEATURE_2_BOOSTER_2)
+
+
 # Observed on a G6992 dishwasher (EK039W, firmware 02.72, protocol 2) through
 # a Quick PowerWash and an Automatic cycle, 2026-11-03. The blob is 24 bytes
 # while the machine is on and empty once it is switched off. Energy is a u8

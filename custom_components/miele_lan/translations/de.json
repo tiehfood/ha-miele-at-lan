@@ -2276,7 +2276,8 @@
               "1": "Stufe 1",
               "2": "Stufe 2",
               "3": "Stufe 3",
-              "boost": "Intensivstufe"
+              "boost": "Intensivstufe",
+              "boost_2": "Intensivstufe 2"
             }
           }
         }
