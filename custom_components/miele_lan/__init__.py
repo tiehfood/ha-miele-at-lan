@@ -41,12 +41,15 @@ from .const import (
 from .coordinator import MieleLanCoordinator
 from .enrollment import (
     DeviceIpResolver,
+    EnrolledDevice,
+    _signed_get_fabs,
     cleanup_stale_subscriptions,
     enroll_all,
     mdns_discover_household,
     mdns_household_ids,
 )
-from .enrollment_report import issue_translation_placeholders, summary_line
+from .enrollment_report import FailedDevice, issue_translation_placeholders, summary_line
+from .recovery import MissedApplianceWatcher
 from .push_listener import (
     MielePushListener,
     PushEvent,
@@ -57,6 +60,11 @@ from .push_listener import (
 from .services import async_remove_services, async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
+
+# Seconds setup waits for discovered appliances to answer a signed probe.
+# Most answer within a second; one in deep standby or on weak Wi-Fi may take
+# the full 2 x 15 s, and is picked up by the recovery watcher instead.
+DISCOVERY_PROBE_DEADLINE = 10.0
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -184,6 +192,8 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         exclude_ha_fab=ha_fab,
         exclude_ip=ha_lan_ip,
         exclude_ip_is_configured=advertise_is_configured,
+        # Appliances that answer later come back through the recovery watcher.
+        probe_deadline=DISCOVERY_PROBE_DEADLINE,
     )
     mdns_static = {r["fabNr"]: r["host"] for r in mdns_results if r.get("fabNr")}
     if mdns_static:
@@ -253,6 +263,9 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     event.peer_fab, sorted(expected_fabs),
                 )
             else:
+                watcher = bundle.get("recovery")
+                if watcher is not None and watcher.notify_push(event.peer_fab):
+                    return  # a missed appliance is back; the watcher reloads
                 _LOGGER.log(
                     level,
                     "push for unknown fab %s — no coordinator (known: %s)",
@@ -323,7 +336,7 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # firmware never re-uses slot numbers, so leftover subs from an old
     # ha_fab keep accumulating until something deletes them. We sweep them
     # on every entry setup so reload-recovery is automatic.
-    for ed in enrolled:
+    async def _cleanup(ed: EnrolledDevice) -> None:
         try:
             n = await cleanup_stale_subscriptions(
                 host_ip=ed.host_ip, fab=ed.fab,
@@ -335,7 +348,13 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("[%s] stale-sub cleanup at setup failed: %s", ed.fab, err)
 
+    # The sweep only tidies up after other installs; nothing in setup depends
+    # on it, and on a slow appliance it can take many seconds. It runs in the
+    # background once setup is done (see the end of this function).
+
+    refresh_failed: list[FailedDevice] = []
     try:
+        coords: dict[str, tuple[MieleLanCoordinator, MieleLanClient]] = {}
         for ed in enrolled:
             client = MieleLanClient.from_hex(
                 host=ed.host_ip,
@@ -345,9 +364,43 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
             await client.__aenter__()
             bundle["clients"].append(client)
-            coord = MieleLanCoordinator(hass, entry, client, fab=ed.fab, enrollment=ed)
+            coords[ed.fab] = (
+                MieleLanCoordinator(hass, entry, client, fab=ed.fab, enrollment=ed),
+                client,
+            )
+
+        async def _first_refresh(fab: str, coord: MieleLanCoordinator) -> None:
             await coord.async_config_entry_first_refresh()
-            bundle["coordinators"][ed.fab] = coord
+            # Registered as soon as it has data, so pushes reach it right away.
+            bundle["coordinators"][fab] = coord
+
+        # One appliance failing its first refresh (a flaky dryer answering
+        # 404 or timing out) used to fail the whole entry, taking every other
+        # appliance down with it until Home Assistant's retry. It is now left
+        # out like an appliance that could not be enrolled, and the recovery
+        # watcher below brings it back. Only no working appliance at all is
+        # still ConfigEntryNotReady (further down).
+        results = await asyncio.gather(
+            *(_first_refresh(fab, coord) for fab, (coord, _client) in coords.items()),
+            return_exceptions=True,
+        )
+        for (fab, (_coord, client)), result in zip(coords.items(), results):
+            if not isinstance(result, Exception):
+                continue
+            _LOGGER.warning("[%s] first refresh failed, leaving it out: %s", fab, result)
+            refresh_failed.append(FailedDevice(fab=fab, reason=f"first refresh failed: {result}"))
+            bundle["clients"].remove(client)
+            try:
+                await client.__aexit__(None, None, None)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("[%s] client close raised: %s", fab, err)
+        for result in results:
+            if isinstance(result, BaseException) and not isinstance(result, Exception):
+                raise result  # cancellation and the like are not appliance faults
+        # Keep the enrollment order, whatever order the refreshes finished in.
+        bundle["coordinators"] = {
+            fab: bundle["coordinators"][fab] for fab in coords if fab in bundle["coordinators"]
+        }
     except Exception:
         # Any failure here would otherwise leak the listener and all
         # already-opened clients — see issue #2's NotRunningException loop.
@@ -378,7 +431,7 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     issue_id = f"unenrolled_devices_{entry.entry_id}"
-    failed = enrollment_result.failed
+    failed = enrollment_result.failed + refresh_failed
     line = summary_line(len(bundle["coordinators"]), failed)
     if failed:
         _LOGGER.warning(line)
@@ -404,6 +457,40 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         *(coord.async_ensure_ident_ready() for coord in bundle["coordinators"].values())
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    async def _cleanup_all() -> None:
+        await asyncio.gather(
+            *(_cleanup(ed) for ed in enrolled if ed.fab in bundle["coordinators"])
+        )
+
+    entry.async_create_background_task(
+        hass, _cleanup_all(), f"{DOMAIN} stale-subscription cleanup"
+    )
+
+    # Appliances setup could not enrol (off, asleep, flaky Wi-Fi) come back
+    # through a reload once they are reachable, instead of staying unavailable
+    # until the user reloads by hand.
+    missing = expected_fabs - set(bundle["coordinators"])
+    if missing:
+        watcher = MissedApplianceWatcher(
+            hass=hass,
+            entry_id=entry.entry_id,
+            missing_fabs=missing,
+            # Only working appliances: a missed one's announcements must count.
+            enrolled_ips={
+                ed.host_ip for ed in enrolled if ed.fab in bundle["coordinators"]
+            },
+            group_id=group_id,
+            exclude_ha_fab=ha_fab,
+            probe=lambda ip: _signed_get_fabs(
+                ip=ip, group_id_hex=group_id, group_key_hex=group_key,
+            ),
+            zeroconf=shared_zc,
+            create_task=lambda coro, name: entry.async_create_background_task(
+                hass, coro, name
+            ),
+        )
+        bundle["recovery"] = watcher
+        await watcher.async_start()
     return True
 
 
@@ -437,6 +524,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     options_unsub = bundle.get("options_unsub")
     if options_unsub is not None:
         options_unsub()
+    watcher = bundle.get("recovery")
+    if watcher is not None:
+        await watcher.async_stop()
     listener = bundle.get("listener")
     if listener is not None:
         await listener.stop()

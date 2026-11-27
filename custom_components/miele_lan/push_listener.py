@@ -255,22 +255,28 @@ class MielePushListener:
         }
         # One instance per Miele service type: each appliance family browses
         # only its own type when looking for household peers to push to.
-        for service_type in MIELE_SERVICE_TYPES:
-            instance_name = f"HomeAssistant {self._our_fab}.{service_type}"
-            info = ServiceInfo(
+        # Registered together: each registration probes the network for about
+        # a second before it completes.
+        infos = [
+            ServiceInfo(
                 service_type,
-                instance_name,
+                f"HomeAssistant {self._our_fab}.{service_type}",
                 addresses=[socket.inet_aton(self._host_ip)],
                 port=self._port,
                 properties=desc,
                 server=self._hostname,
             )
-            await self._zc.async_register_service(info, allow_name_change=True)
-            self._service_infos.append(info)
+            for service_type in MIELE_SERVICE_TYPES
+        ]
+        await asyncio.gather(
+            *(self._zc.async_register_service(info, allow_name_change=True) for info in infos)
+        )
+        self._service_infos.extend(infos)
+        for info in infos:
             _LOGGER.info(
                 "mDNS advertised: %s server=%s addr=%s:%d group=%s "
                 "devicetype=%s — appliances will reach us at this address+port",
-                instance_name, self._hostname, self._host_ip, self._port,
+                info.name, self._hostname, self._host_ip, self._port,
                 self._group_id, self._device_type,
             )
 

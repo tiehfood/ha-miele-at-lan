@@ -117,7 +117,8 @@ def _run_setup_cloud(monkeypatch, entry: _FakeEntry) -> dict:
 
     async def _fake_mdns_discover_household(*, group_id_hex, group_key_hex, timeout,
                                               zeroconf, exclude_ha_fab, exclude_ip,
-                                              exclude_ip_is_configured=False):
+                                              exclude_ip_is_configured=False,
+                                              probe_deadline=None):
         captured_mdns_kwargs["exclude_ip"] = exclude_ip
         captured_mdns_kwargs["exclude_ip_is_configured"] = exclude_ip_is_configured
         return []
