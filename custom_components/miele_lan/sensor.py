@@ -940,12 +940,12 @@ class MieleLanDop2SensorDef:
 
 
 # DOP2-derived diagnostics. Only exposed by appliances whose firmware leaves
-# the DOP2 surface reachable at the HAN tier (locally-commissioned ovens, in
-# practice). Entries map a translation key to a getter against the coordinator's
+# the DOP2 surface reachable at the HAN tier (locally-commissioned ovens and
+# laundry, in practice). Entries map a translation key to a getter against the coordinator's
 # `dop2` dict, which is refreshed at DOP2_REFRESH_INTERVAL (see coordinator.py).
 DOP2_SENSORS: tuple[MieleLanDop2SensorDef, ...] = (
     MieleLanDop2SensorDef(
-        types=OVEN_FAMILY,
+        types=(*OVEN_FAMILY, *LAUNDRY_FAMILY),
         description=MieleLanDop2SensorDescription(
             key="hours_of_operation",
             translation_key="hours_of_operation",

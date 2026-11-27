@@ -395,7 +395,9 @@ def parse_hours_of_operation(payload: bytes) -> dict[str, int]:
     All five raw U32 values are in **minutes**, not hours. The
     ValueInterpretation enum in the firmware defines DurationMin=6 but has
     no DurationHours entry; observed evidence (3302→3337 over ~14 h of
-    wall-clock time, ~35 min of actual cooking) confirms the unit.
+    wall-clock time, ~35 min of actual cooking) confirms the unit. On a
+    washer and a dryer the total grew by the programme runtime in minutes
+    (#87, see test_hours_of_operation_laundry).
     The sensor layer is responsible for converting to hours for display.
     """
     _, _, attrs = parse_simple_leaf(payload)
