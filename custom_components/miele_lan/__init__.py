@@ -336,10 +336,6 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("[%s] stale-sub cleanup at setup failed: %s", ed.fab, err)
 
-    # Appliances are independent: clean up and do the first refresh of all of
-    # them at once, so setup waits for the slowest appliance, not the sum.
-    await asyncio.gather(*(_cleanup(ed) for ed in enrolled))
-
     try:
         coords: dict[str, MieleLanCoordinator] = {}
         for ed in enrolled:
@@ -427,6 +423,17 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         *(coord.async_ensure_ident_ready() for coord in bundle["coordinators"].values())
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # The stale-subscription sweep only tidies up after other installs, and
+    # nothing in setup depends on it, so it runs in the background instead of
+    # making setup wait for the slowest appliance. Cancelled if the entry
+    # unloads first.
+    async def _cleanup_all() -> None:
+        await asyncio.gather(*(_cleanup(ed) for ed in enrolled))
+
+    entry.async_create_background_task(
+        hass, _cleanup_all(), f"{DOMAIN} stale-subscription cleanup"
+    )
     return True
 
 

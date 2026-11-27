@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import aiohttp
+from asyncmiele.exceptions.network import NetworkConnectionError, NetworkTimeoutError
 
 from .api import MieleLanClient
 from .const import MIELE_SERVICE_TYPES
@@ -252,7 +253,11 @@ async def enroll_device(
 
 async def _list_subscription_slots(client: Any) -> list[int] | None:
     """Slot numbers from one signed `GET /Subscriptions/`, or None if the
-    appliance does not answer it with a JSON object.
+    appliance answers it with something other than a JSON object.
+
+    A timeout or refused connection is raised instead: an appliance that does
+    not answer this request will not answer one per slot number either, and
+    scanning it cost up to 16 timeouts in a row.
 
     Seen on WWV980, TWV680WP and PG8133 firmware: the body maps each live slot
     number to its entry, e.g. `{"1": {...}, "2": {...}}`, or `{}` when empty.
@@ -262,6 +267,8 @@ async def _list_subscription_slots(client: Any) -> list[int] | None:
             "GET", "/Subscriptions/", allowed_status=(200,),
         )
         listing = json.loads(body.decode("utf-8", errors="replace").strip() or "{}")
+    except (NetworkTimeoutError, NetworkConnectionError):
+        raise
     except Exception as err:  # noqa: BLE001
         _LOGGER.debug("GET /Subscriptions/ listing failed, scanning slots: %s", err)
         return None
@@ -344,9 +351,17 @@ async def cleanup_stale_subscriptions(
                     _LOGGER.debug(
                         "[%s] couldn't delete stale slot %d: %s", fab, n, err,
                     )
+    except (NetworkTimeoutError, NetworkConnectionError) as err:
+        # The sweep runs in the background and is retried on the next setup;
+        # an appliance that does not answer right now is not worth a warning.
+        _LOGGER.debug(
+            "[%s @ %s] stale-subscription cleanup skipped, appliance did not "
+            "answer: %s", fab, host_ip, type(err).__name__,
+        )
     except Exception as err:
         _LOGGER.warning(
-            "[%s @ %s] stale-subscription cleanup failed: %s", fab, host_ip, err,
+            "[%s @ %s] stale-subscription cleanup failed: %s: %s",
+            fab, host_ip, type(err).__name__, err,
         )
     return deleted
 

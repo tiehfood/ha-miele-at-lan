@@ -177,3 +177,31 @@ def test_a_failed_first_refresh_lets_the_others_finish_before_closing_clients(
     assert events == [
         f"refreshed {DRYER}", "closed 203.0.113.1", "closed 203.0.113.2",
     ]
+
+
+def test_setup_does_not_wait_for_the_stale_subscription_sweep(monkeypatch) -> None:
+    async def _refresh(fab: str) -> None:
+        return None
+
+    started: list[str] = []
+    never = asyncio.Event()
+
+    async def _stuck_cleanup(*, fab, **kwargs) -> int:
+        # An appliance on weak Wi-Fi: the sweep can take many seconds.
+        started.append(fab)
+        await never.wait()
+        return 0
+
+    _patch_setup(monkeypatch, refresh=_refresh, cleanup=_stuck_cleanup)
+    entry = _Entry()
+
+    async def _main() -> None:
+        ok = await asyncio.wait_for(miele_lan._setup_cloud(_Hass(), entry), SLOW)
+        assert ok is True
+        for _ in range(10):  # let the background sweep start
+            await asyncio.sleep(0)
+        assert sorted(started) == [WASHER, DRYER]
+        assert len(entry.background) == 1 and not entry.background[0].done()
+        entry.background[0].cancel()
+
+    asyncio.run(_main())

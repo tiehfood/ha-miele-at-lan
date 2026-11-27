@@ -156,3 +156,25 @@ def test_cleanup_scans_slot_numbers_when_the_listing_fails(monkeypatch) -> None:
     assert deleted == 1
     gets = [r for m, r in raw.requests if m == "GET" and r != "/Subscriptions/"]
     assert len(gets) == 7 + 16  # up to the last live slot, then 16 misses
+
+
+def test_cleanup_does_not_scan_an_appliance_that_does_not_answer(monkeypatch) -> None:
+    from asyncmiele.exceptions.network import NetworkTimeoutError
+
+    class _SilentRaw(_FakeRaw):
+        async def _request_bytes(self, method, resource, allowed_status=(200,), body=None):
+            self.requests.append((method, resource))
+            raise NetworkTimeoutError("")
+
+    raw = _SilentRaw(None, {})
+    monkeypatch.setattr(
+        enrollment_mod.MieleLanClient, "from_hex",
+        classmethod(lambda cls, *a, **k: _FakeClient(raw)),
+    )
+    deleted = asyncio.run(enrollment_mod.cleanup_stale_subscriptions(
+        host_ip="203.0.113.1", fab="000000000001",
+        group_id_hex="00" * 8, group_key_hex="00" * 64, our_ha_fab="000999000001",
+    ))
+
+    assert deleted == 0
+    assert raw.requests == [("GET", "/Subscriptions/")]
