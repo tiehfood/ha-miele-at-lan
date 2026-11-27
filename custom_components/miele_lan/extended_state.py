@@ -241,11 +241,16 @@ def parse_dop1_washer_water_litres(hex_str: str | None) -> int | None:
 # A hood on the old protocol (ProtocolVersion 2) sends the layout the Miele
 # app reads for it: a 3-byte header (appliance type 18, layout version) and
 # the hood's own data, big-endian. The offsets are bytes of the whole blob.
-# Checked on a DAS 4630 (66 bytes), which has a second booster level and
-# reports the bit the app tests before it offers one.
+# Checked on a DAS 4630 (66 bytes): the three brightness steps of its light
+# button read 0x5555, 0xAAAA and 0xFFFF, and the two feature words carry the
+# bits the app tests before it offers dimming and a second booster level.
 DOP1_HOOD_APPLIANCE_TYPE = 18
+DOP1_HOOD_LIGHT_DIM_OFFSET = 8
+DOP1_HOOD_FEATURES_1_OFFSET = 34
 DOP1_HOOD_FEATURES_2_OFFSET = 37
+DOP1_HOOD_FEATURE_1_LIGHT_DIMMABLE = 1 << 4
 DOP1_HOOD_FEATURE_2_BOOSTER_2 = 1 << 7
+DOP1_HOOD_MAX_DIM_VALUE = 0xFFFF
 
 
 def _dop1_hood_u16(hex_str: str | None, offset: int) -> int | None:
@@ -260,6 +265,20 @@ def _dop1_hood_u16(hex_str: str | None, offset: int) -> int | None:
     if int.from_bytes(payload[:2], "big") != DOP1_HOOD_APPLIANCE_TYPE:
         return None
     return int.from_bytes(payload[offset:offset + 2], "big")
+
+
+def parse_dop1_hood_light_dim_value(hex_str: str | None) -> int | None:
+    """Read the main light's dim value (bytes 8-9, 0xFFFF is full brightness).
+
+    The caller must gate this layout by appliance type and protocol.
+    """
+    return _dop1_hood_u16(hex_str, DOP1_HOOD_LIGHT_DIM_OFFSET)
+
+
+def dop1_hood_light_dimmable(hex_str: str | None) -> bool:
+    """Whether the hood reports its main light as dimmable."""
+    features = _dop1_hood_u16(hex_str, DOP1_HOOD_FEATURES_1_OFFSET)
+    return bool(features and features & DOP1_HOOD_FEATURE_1_LIGHT_DIMMABLE)
 
 
 def dop1_hood_has_booster_2(hex_str: str | None) -> bool:

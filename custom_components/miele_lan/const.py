@@ -189,7 +189,7 @@ RUN_ON_TIME_MINUTES: tuple[int, ...] = (0, 5, 15)
 #   [1]     Lichtquelle      = 1 (TypeLightSource.Licht_Kochfeld_ — main light)
 #   [2]     Betriebszustand  = LightingMode: 4 (CookingMode) on, 0 (Off) off
 #   [3:9]   Rot/Gruen/Blau_Dimmwert = 0
-#   [9:11]  WW_Dimmwert      = 0xFFFF when on, 0 when off
+#   [9:11]  WW_Dimmwert      = brightness when on (0xFFFF full), 0 when off
 #   [11:13] KW_Dimmwert      = 0
 # Worth having alongside the plain `PUT /State {"Light":1|2}` path because it
 # applies far faster on this firmware — measured ~0.8s vs ~4.9s to turn on.

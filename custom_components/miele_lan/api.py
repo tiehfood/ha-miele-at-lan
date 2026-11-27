@@ -309,14 +309,19 @@ def build_dop1_run_on_time_request(minutes: int) -> str:
     )
 
 
-def build_dop1_main_light_request(on: bool) -> str:
-    """SwitchLight_W write — switch the hood's main light on or off."""
+def build_dop1_main_light_request(on: bool, dim_value: int = 0xFFFF) -> str:
+    """SwitchLight_W write — switch the hood's main light on or off.
+
+    `dim_value` is the brightness while on, 0xFFFF being full.
+    """
+    if not 0 < dim_value <= 0xFFFF:
+        raise ValueError(f"dim value out of range: {dim_value}")
     section = bytearray(13)
     section[0] = DOP1_SWITCHLIGHT_STRUKTUR_VERSION
     section[1] = DOP1_SWITCHLIGHT_LICHTQUELLE_MAIN
     section[2] = DOP1_LIGHTINGMODE_COOKING if on else DOP1_LIGHTINGMODE_OFF
     # Rot/Gruen/Blau_Dimmwert (offsets 3, 5, 7) stay 0.
-    struct.pack_into(">H", section, 9, 0xFFFF if on else 0)  # WW_Dimmwert
+    struct.pack_into(">H", section, 9, dim_value if on else 0)  # WW_Dimmwert
     struct.pack_into(">H", section, 11, 0)  # KW_Dimmwert
     return _dop1_request(
         DOP1_SWITCHLIGHT_OBJECT_ID, DOP1_REQUEST_TYPE_WRITE, bytes(section)
@@ -1025,14 +1030,15 @@ class MieleLanClient:
             build_dop1_run_on_time_request(minutes), what="Fan run-on time write"
         )
 
-    async def set_main_light_dop1(self, on: bool) -> None:
+    async def set_main_light_dop1(self, on: bool, dim_value: int = 0xFFFF) -> None:
         """Switch the hood's main light via Dop1 SwitchLight_W.
 
         Same result as `light_on()`/`light_off()` but much faster to apply on
-        hood firmware; callers keep the /State path as a fallback.
+        hood firmware; callers keep the /State path as a fallback. Only this
+        write carries a brightness (`dim_value`, 0xFFFF is full).
         """
         await self._dop1_post(
-            build_dop1_main_light_request(on), what="Main-light write"
+            build_dop1_main_light_request(on, dim_value), what="Main-light write"
         )
 
     async def read_setting_pf(self, pf_id: int) -> int | None:

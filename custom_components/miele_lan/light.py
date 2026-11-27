@@ -8,7 +8,8 @@ Writes: signed `PUT /State {"Light": 1|2}` — wrapped by
 `MieleLanClient.light_on()` / `light_off()`. Hoods that take the Dop1 writes
 use `set_main_light_dop1()` instead, which the appliance applies much faster
 (~0.8s vs ~4.9s to switch on, measured on an EK039W hood), falling back to
-/State if that write fails.
+/State if that write fails. Only that write carries a brightness, so a hood
+light that reports itself as dimmable gets a brightness as well.
 """
 
 from __future__ import annotations
@@ -16,14 +17,24 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.light import ColorMode, LightEntity, LightEntityDescription
+from homeassistant.components.light import (
+    ATTR_BRIGHTNESS,
+    ColorMode,
+    LightEntity,
+    LightEntityDescription,
+)
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, LIGHTABLE_FAMILY, MieleAppliance
 from .coordinator import MieleLanCoordinator, model_name
 from .entity import MieleLanEntity
+from .extended_state import (
+    DOP1_HOOD_MAX_DIM_VALUE,
+    dop1_hood_light_dimmable,
+    parse_dop1_hood_light_dim_value,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,10 +67,8 @@ async def async_setup_entry(
 
 
 class MieleLanLight(MieleLanEntity, LightEntity):
-    """Cavity / cabinet light. On/Off only — no brightness or color."""
+    """Cavity / cabinet / hood light. On/off, plus brightness on a dimmable hood light."""
 
-    _attr_color_mode = ColorMode.ONOFF
-    _attr_supported_color_modes = {ColorMode.ONOFF}
     entity_description = LightEntityDescription(
         key="cavity_light",
         translation_key="cavity_light",
@@ -67,6 +76,40 @@ class MieleLanLight(MieleLanEntity, LightEntity):
 
     def __init__(self, coordinator: MieleLanCoordinator) -> None:
         super().__init__(coordinator, "cavity_light")
+        # The write always carries a dim value, so switching on without a
+        # brightness needs the last one to come back at the same level.
+        self._last_dim_value = DOP1_HOOD_MAX_DIM_VALUE
+
+    @property
+    def _dim_value(self) -> int | None:
+        """The hood light's dim value, None for a light that cannot be dimmed."""
+        coord = self.coordinator
+        if not coord.hood_dop1_supported:
+            return None
+        extended = coord.data.state.get("ExtendedState")
+        if not dop1_hood_light_dimmable(extended):
+            return None
+        return parse_dop1_hood_light_dim_value(extended)
+
+    @property
+    def color_mode(self) -> ColorMode:
+        return ColorMode.ONOFF if self._dim_value is None else ColorMode.BRIGHTNESS
+
+    @property
+    def supported_color_modes(self) -> set[ColorMode]:
+        return {self.color_mode}
+
+    @property
+    def brightness(self) -> int | None:
+        # The hood keeps eight bits and reports them twice (0x5555 = 85).
+        dim = self._dim_value
+        return None if dim is None else dim >> 8
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        if self.is_on and self._dim_value:
+            self._last_dim_value = self._dim_value
+        super()._handle_coordinator_update()
 
     @property
     def is_on(self) -> bool | None:
@@ -79,11 +122,11 @@ class MieleLanLight(MieleLanEntity, LightEntity):
             return False
         return None  # 0 = unsupported / not yet known
 
-    async def _set_light(self, on: bool) -> None:
+    async def _set_light(self, on: bool, dim_value: int = DOP1_HOOD_MAX_DIM_VALUE) -> None:
         client = self.coordinator.client
         if self.coordinator.hood_dop1_supported:
             try:
-                await client.set_main_light_dop1(on)
+                await client.set_main_light_dop1(on, dim_value)
             except Exception as err:  # noqa: BLE001
                 # A light that can't be switched is worse than a slow one, so
                 # any Dop1 failure falls through to the /State path that every
@@ -98,7 +141,11 @@ class MieleLanLight(MieleLanEntity, LightEntity):
         await self.coordinator.async_request_refresh()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        await self._set_light(True)
+        brightness = kwargs.get(ATTR_BRIGHTNESS)
+        if brightness is None:
+            await self._set_light(True, self._last_dim_value)
+        else:
+            await self._set_light(True, brightness * 257)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self._set_light(False)

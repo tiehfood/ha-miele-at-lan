@@ -78,7 +78,7 @@ Some diagnostic sensors are turned off by default. To turn one on, open the devi
 3. The **Programme** list appears only on dishwashers that share their programme list (for example a G7655). See [Choosing a dishwasher programme](#choosing-a-dishwasher-programme).
 4. Washing machines and dryers have no Power switch.
 5. Miele does not allow changing settings on fridges, freezers and wine cabinets over the home network. You can watch them, but not change temperatures or switch SuperCool or SuperFreeze. Changes you make in the Miele app still show up in Home Assistant right away. Wine cabinets that report their interior light also get a **Light** entity. Whether switching it works has not been confirmed yet.
-6. Hoods come in two kinds, depending on the hood's protocol. One kind gets a **Ventilation** fan (off, Level 1–3, Boost, and Boost 2 on hoods with a second booster level), a **Fan run-on time** setting (Off, 5 or 15 minutes) and filter saturation sensors. The other kind gets a **Power** switch and a read-only **Ventilation step** sensor. **Fan run-on time** shows the last value set from Home Assistant; the hood does not report it.
+6. Hoods come in two kinds, depending on the hood's protocol. One kind gets a **Ventilation** fan (off, Level 1–3, Boost, and Boost 2 on hoods with a second booster level), a **Fan run-on time** setting (Off, 5 or 15 minutes) and filter saturation sensors. Its **Light** can be dimmed if the hood reports a dimmable light. The other kind gets a **Power** switch and a read-only **Ventilation step** sensor. **Fan run-on time** shows the last value set from Home Assistant; the hood does not report it.
 
 ## Before you start
 
