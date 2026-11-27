@@ -178,3 +178,38 @@ def test_cleanup_does_not_scan_an_appliance_that_does_not_answer(monkeypatch) ->
 
     assert deleted == 0
     assert raw.requests == [("GET", "/Subscriptions/")]
+
+
+def test_push_listener_registers_its_announcements_together() -> None:
+    """Each mDNS registration probes the network for about a second, so the
+    announcements under the two service types must not wait for each other."""
+    from custom_components.miele_lan.const import MIELE_SERVICE_TYPES
+    from custom_components.miele_lan.push_listener import MielePushListener
+
+    class _SlowZeroconf:
+        def __init__(self) -> None:
+            self.registered: list = []
+
+        async def async_register_service(self, info, allow_name_change=False):
+            await asyncio.sleep(SLOW)
+            self.registered.append(info)
+
+        async def async_unregister_service(self, info):
+            return None
+
+    async def _noop(_event) -> None:
+        return None
+
+    zc = _SlowZeroconf()
+    listener = MielePushListener(
+        our_fab="000999000001", group_id="0123456789ABCDEF", group_key="00" * 64,
+        host_ip="203.0.113.226", port=18082, on_push=_noop, zeroconf=zc,
+    )
+
+    start = time.monotonic()
+    asyncio.run(listener._advertise_mdns())
+    elapsed = time.monotonic() - start
+
+    assert len(MIELE_SERVICE_TYPES) > 1
+    assert elapsed < SLOW * 1.5, f"took {elapsed:.2f}s, registrations ran one after another"
+    assert sorted(i.type for i in zc.registered) == sorted(MIELE_SERVICE_TYPES)
