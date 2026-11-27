@@ -45,7 +45,6 @@ class _StubRawClient:
         lambda client: client.set_fan_level(2),
         lambda client: client.set_fan_run_on_time(5),
         lambda client: client.set_main_light_dop1(True),
-        lambda client: client.write_setting_pf(1, 1),
         lambda client: client.read_setting_pf(1),
     ],
 )
@@ -64,7 +63,6 @@ def test_network_timeout_reports_readable_error(caller) -> None:
         lambda client: client.set_fan_level(2),
         lambda client: client.set_fan_run_on_time(5),
         lambda client: client.set_main_light_dop1(True),
-        lambda client: client.write_setting_pf(1, 1),
         lambda client: client.read_setting_pf(1),
     ],
 )

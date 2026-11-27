@@ -64,12 +64,6 @@ def test_run_on_time_and_main_light_use_the_same_endpoint() -> None:
     assert raw.calls[1][2]["Request"].startswith("14000200")
 
 
-def test_write_setting_pf_sends_the_write_request_type() -> None:
-    client, raw = _client()
-    asyncio.run(client.write_setting_pf(PF_DA_FETTFILTER_GRENZE_AKTUELL, 1))
-    assert raw.calls[0][2] == {"Request": "12010200009C4A00000001"}
-
-
 # ------------------------------------------------------- error conventions
 def test_http_400_is_treated_as_a_benign_no_op() -> None:
     """Re-asserting the current value must not surface as an error."""

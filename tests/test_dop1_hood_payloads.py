@@ -17,7 +17,6 @@ from custom_components.miele_lan.api import (  # noqa: E402
     build_dop1_main_light_request,
     build_dop1_run_on_time_request,
     build_dop1_setting_pf_read_request,
-    build_dop1_setting_pf_write_request,
     parse_dop1_setting_pf_value,
 )
 from custom_components.miele_lan.const import (  # noqa: E402
@@ -82,15 +81,6 @@ def test_main_light_section_is_thirteen_bytes() -> None:
 
 # --- Programmierfunktion settings ------------------------------------------
 
-def test_setting_pf_write_matches_capture() -> None:
-    # 1201 + write(02) + 00 + [version=0, PF_ID u16 BE, value u32 BE]
-    # 40010 == 0x9C4A
-    assert (
-        build_dop1_setting_pf_write_request(PF_DA_FETTFILTER_GRENZE_AKTUELL, 1)
-        == "12010200" + "009C4A00000001"
-    )
-
-
 def test_setting_pf_read_matches_capture() -> None:
     # Read request carries only version + PF_ID; note the read type byte (01).
     assert (
@@ -101,9 +91,7 @@ def test_setting_pf_read_matches_capture() -> None:
 
 def test_setting_pf_rejects_out_of_range() -> None:
     with pytest.raises(ValueError):
-        build_dop1_setting_pf_write_request(0x10000, 0)
-    with pytest.raises(ValueError):
-        build_dop1_setting_pf_write_request(1, 0x1_0000_0000)
+        build_dop1_setting_pf_read_request(0x10000)
     with pytest.raises(ValueError):
         build_dop1_setting_pf_read_request(-1)
 

@@ -323,20 +323,6 @@ def build_dop1_main_light_request(on: bool) -> str:
     )
 
 
-def build_dop1_setting_pf_write_request(pf_id: int, value: int) -> str:
-    """Setting_PF_Schreiben_BE — write a Programmierfunktion value."""
-    if not 0 <= pf_id <= 0xFFFF:
-        raise ValueError(f"PF id out of range: {pf_id}")
-    if not 0 <= value <= 0xFFFFFFFF:
-        raise ValueError(f"PF value out of range: {value}")
-    section = bytearray(7)
-    struct.pack_into(">H", section, 1, pf_id)
-    struct.pack_into(">I", section, 3, value)
-    return _dop1_request(
-        DOP1_SETTING_PF_OBJECT_ID, DOP1_REQUEST_TYPE_WRITE, bytes(section)
-    )
-
-
 def build_dop1_setting_pf_read_request(pf_id: int) -> str:
     """Setting_PF_Lesen_BE — ask for a Programmierfunktion's current value."""
     if not 0 <= pf_id <= 0xFFFF:
@@ -1047,13 +1033,6 @@ class MieleLanClient:
         """
         await self._dop1_post(
             build_dop1_main_light_request(on), what="Main-light write"
-        )
-
-    async def write_setting_pf(self, pf_id: int, value: int) -> None:
-        """Write a Programmierfunktion setting via the generic Dop1 1201 object."""
-        await self._dop1_post(
-            build_dop1_setting_pf_write_request(pf_id, value),
-            what=f"Setting {pf_id} write",
         )
 
     async def read_setting_pf(self, pf_id: int) -> int | None:

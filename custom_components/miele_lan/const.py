@@ -185,10 +185,11 @@ DOP1_LIGHTINGMODE_OFF = 0
 DOP1_LIGHTINGMODE_COOKING = 4
 
 # Generic "Programmierfunktion" settings object (Setting_PF_Lesen/Schreiben_BE).
-# One object id for both directions, distinguished by the request-type byte:
-#   write section: [0] Version = 0, [1:3] PF_ID (U16 BE), [3:7] Wert (U32 BE)
+# One object id for both directions, distinguished by the request-type byte.
+# Only the read is used here:
 #   read  request: [0] Version = 0, [1:3] PF_ID (U16 BE)
 #   read  section: [0] Version, [1:3] PF_ID, [3:7] Wert, [7:11] Min, [11:15] Max
+#   write section: [0] Version = 0, [1:3] PF_ID (U16 BE), [3:7] Wert (U32 BE)
 DOP1_SETTING_PF_OBJECT_ID = "1201"
 
 # Hood Programmierfunktion ids (ProgrammierfunktionEnum; DA_* = Dunstabzug).
