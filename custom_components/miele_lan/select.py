@@ -20,9 +20,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     DISHWASHER_FAMILY,
     DOMAIN,
+    PROGRAM_SELECTABLE_STATUSES,
     RUN_ON_TIME_MINUTES,
-    STATUS_ON,
-    STATUS_PROGRAMMED,
 )
 from .coordinator import MieleLanCoordinator
 from .entity import MieleLanEntity
@@ -32,10 +31,6 @@ from .enums import DishWasherProgramId
 RUN_ON_OPTIONS: dict[str, int] = {
     ("off" if m == 0 else f"{m}_min"): m for m in RUN_ON_TIME_MINUTES
 }
-
-# A programme can be picked while the dishwasher is on or already has one
-# programmed, never while it waits for a delayed start, runs or is paused.
-_PROGRAM_SELECTABLE_STATUSES = frozenset({STATUS_ON, STATUS_PROGRAMMED})
 
 
 async def async_setup_entry(
@@ -136,7 +131,7 @@ class MieleLanProgramSelect(MieleLanEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         status = self.coordinator.data.state.get("Status")
-        if status not in _PROGRAM_SELECTABLE_STATUSES:
+        if status not in PROGRAM_SELECTABLE_STATUSES:
             raise HomeAssistantError(
                 "A programme can only be selected while the dishwasher is on "
                 f"and not running (Status={status})."

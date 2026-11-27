@@ -19,7 +19,12 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
 from .api import build_program_select_payload
-from .const import DOMAIN, PROGRAM_SELECT_LEAF, PROGRAM_SELECT_UNIT
+from .const import (
+    DOMAIN,
+    PROGRAM_SELECT_LEAF,
+    PROGRAM_SELECT_UNIT,
+    PROGRAM_SELECTABLE_STATUSES,
+)
 from .dop2_dump import (
     ANY_HTTP_STATUS,
     build_dop2_resource,
@@ -169,8 +174,16 @@ async def _select_program(coordinator: Any, program_id: int) -> dict[str, Any]:
     """Read 2/1577, write it back with the new ProgId, and read it again.
 
     The write's HTTP status is returned rather than raised: this service
-    exists to find out what each appliance accepts (#61).
+    exists to find out what each appliance accepts (#61). Same Status
+    check as the Programme select entity, so nothing is written to an
+    appliance that is off, waiting to start, running or paused.
     """
+    status = coordinator.data.state.get("Status")
+    if status not in PROGRAM_SELECTABLE_STATUSES:
+        raise HomeAssistantError(
+            "A programme can only be selected while the appliance is on and "
+            f"not running (Status={status}); nothing was written."
+        )
     resource = build_dop2_resource(
         coordinator.fab, PROGRAM_SELECT_UNIT, PROGRAM_SELECT_LEAF, 0, 0
     )

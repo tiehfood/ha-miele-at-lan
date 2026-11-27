@@ -93,8 +93,12 @@ class _Raw:
         return self.answers.pop(0)
 
 
-def _coordinator(raw: _Raw):
-    return SimpleNamespace(fab="000000000001", client=SimpleNamespace(raw=raw))
+def _coordinator(raw: _Raw, status: int | None = 2):
+    return SimpleNamespace(
+        fab="000000000001",
+        client=SimpleNamespace(raw=raw),
+        data=SimpleNamespace(state={"Status": status}),
+    )
 
 
 @pytest.mark.asyncio
@@ -129,3 +133,24 @@ async def test_select_program_never_writes_without_a_read() -> None:
     with pytest.raises(HomeAssistantError, match="HTTP 500"):
         await _select_program(_coordinator(raw), ECO)
     assert [m for m, _, _ in raw.requests] == ["GET"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [2, 3])
+async def test_select_program_writes_while_on_or_programmed(status: int) -> None:
+    after = build_program_select_payload(READ, ECO)
+    raw = _Raw([(200, READ), (200, b""), (200, after)])
+    result = await _select_program(_coordinator(raw, status), ECO)
+    assert result["program_id_after"] == ECO
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [None, 1, 4, 5, 6, 7])
+async def test_select_program_touches_nothing_in_any_other_status(status) -> None:
+    from homeassistant.exceptions import HomeAssistantError
+
+    raw = _Raw([(200, READ)])
+    with pytest.raises(HomeAssistantError, match="nothing was written"):
+        await _select_program(_coordinator(raw, status), ECO)
+    assert raw.requests == []
+

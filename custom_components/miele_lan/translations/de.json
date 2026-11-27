@@ -2359,7 +2359,7 @@
     },
     "select_program": {
       "name": "Programm auswählen (experimentell)",
-      "description": "Wählt ein Programm über das DOP2-Blatt 2/1577 aus, wie die Miele-App. Startet es nicht. Experimentell: gibt den HTTP-Status und das Blatt vorher und nachher zurück, zum Melden in GitHub-Issue #61.",
+      "description": "Wählt ein Programm über das DOP2-Blatt 2/1577 aus, wie die Miele-App. Startet es nicht. Funktioniert nur, solange das Gerät eingeschaltet ist und kein Programm läuft. Experimentell: gibt den HTTP-Status und das Blatt vorher und nachher zurück, zum Melden in GitHub-Issue #61.",
       "fields": {
         "device_id": {
           "name": "Gerät",

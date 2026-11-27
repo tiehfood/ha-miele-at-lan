@@ -2359,7 +2359,7 @@
     },
     "select_program": {
       "name": "Select programme (experimental)",
-      "description": "Selects a programme by writing DOP2 leaf 2/1577, the way the Miele app does. Does not start it. Experimental: returns the HTTP status and the leaf before and after, for reporting in GitHub issue #61.",
+      "description": "Selects a programme by writing DOP2 leaf 2/1577, the way the Miele app does. Does not start it. Only works while the appliance is on and not running. Experimental: returns the HTTP status and the leaf before and after, for reporting in GitHub issue #61.",
       "fields": {
         "device_id": {
           "name": "Device",

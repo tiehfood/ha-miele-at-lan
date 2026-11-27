@@ -86,6 +86,10 @@ STATUS_IN_USE = 5
 STATUS_PAUSE = 6
 STATUS_PROGRAM_ENDED = 7
 
+# A programme can be picked while the appliance is on or already has one
+# programmed, never while it waits for a delayed start, runs or is paused.
+PROGRAM_SELECTABLE_STATUSES = frozenset({STATUS_ON, STATUS_PROGRAMMED})
+
 # DOP2 GLOBAL_USER_REQ leaf — universal across oven, laundry, dishwasher.
 USER_REQUEST_UNIT = 2
 USER_REQUEST_LEAF = 1583
