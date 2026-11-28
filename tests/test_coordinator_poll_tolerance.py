@@ -1,8 +1,9 @@
 """One transient poll failure must not flap every entity to unavailable."""
+import logging
 from types import SimpleNamespace
 
 import pytest
-from asyncmiele.exceptions.network import NetworkTimeoutError
+from asyncmiele.exceptions.network import NetworkConnectionError, NetworkTimeoutError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import frame
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -11,6 +12,7 @@ from custom_components.miele_lan.coordinator import (
     POLL_FAILURE_TOLERANCE,
     MieleLanCoordinator,
     MieleLanData,
+    UpdateFailedUnreachable,
 )
 
 
@@ -102,3 +104,41 @@ async def test_first_ever_failure_raises_immediately(make_coordinator):
     with pytest.raises(UpdateFailed):
         await coord._async_update_data()
     assert coord._poll_ever_succeeded is False
+
+
+@pytest.mark.asyncio
+async def test_tolerated_failures_log_at_debug_only(make_coordinator, caplog):
+    """HA's log-when-unavailable rule: nothing above debug while tolerated."""
+    coord = make_coordinator(
+        [{"status": 5}]
+        + [NetworkTimeoutError(str(i)) for i in range(POLL_FAILURE_TOLERANCE)]
+    )
+    await coord._async_update_data()
+
+    with caplog.at_level(logging.DEBUG, logger="custom_components.miele_lan"):
+        for _ in range(POLL_FAILURE_TOLERANCE):
+            await coord._async_update_data()
+
+    tolerated = [r for r in caplog.records if "tolerated" in r.getMessage()]
+    assert len(tolerated) == POLL_FAILURE_TOLERANCE
+    assert all(r.levelno == logging.DEBUG for r in tolerated)
+
+
+@pytest.mark.asyncio
+async def test_unreachable_appliance_raises_the_unreachable_kind(make_coordinator):
+    coord = make_coordinator(
+        [NetworkConnectionError("Cannot connect to host 192.0.2.10:80")]
+    )
+
+    with pytest.raises(UpdateFailedUnreachable):
+        await coord._async_update_data()
+
+
+@pytest.mark.asyncio
+async def test_other_failures_stay_plain_update_failed(make_coordinator):
+    coord = make_coordinator([ValueError("garbled /State body")])
+
+    with pytest.raises(UpdateFailed) as excinfo:
+        await coord._async_update_data()
+    if UpdateFailedUnreachable is not UpdateFailed:
+        assert not isinstance(excinfo.value, UpdateFailedUnreachable)
