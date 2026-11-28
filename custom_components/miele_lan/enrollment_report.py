@@ -16,6 +16,10 @@ class FailedDevice:
 
     fab: str
     reason: str
+    # True when the failure says nothing about the appliance's setup: it did
+    # not answer, or answered that it was busy. Nothing for the user to fix
+    # while it is set up in Home Assistant and merely unavailable.
+    transient: bool = False
 
 
 def summary_line(enrolled_count: int, failed: list[FailedDevice]) -> str:
@@ -33,11 +37,35 @@ def summary_line(enrolled_count: int, failed: list[FailedDevice]) -> str:
     return f"enrolled {enrolled_count} of {total} appliances — missing {missing}"
 
 
-def issue_translation_placeholders(failed: list[FailedDevice]) -> dict[str, str]:
-    """Translation placeholders for the `unenrolled_devices` repair issue."""
+def appliance_label(fab: str, name: str | None) -> str:
+    """How the repair issue names an appliance: "Dishwasher (000100000002)".
+
+    The fab number alone tells a user nothing about which appliance it is;
+    it stays in brackets because it is what the logs and the Miele app use.
+    """
+    return f"{name} ({fab})" if name else fab
+
+
+def issue_id(entry_id: str, fab: str) -> str:
+    """One repair issue per appliance, so ignoring one sticks, and so an
+    issue is only deleted once that appliance is really set up."""
+    return f"{ISSUE_ID_PREFIX}{entry_id}_{fab}"
+
+
+ISSUE_ID_PREFIX = "unenrolled_"
+LEGACY_ISSUE_ID_PREFIX = "unenrolled_devices_"  # one issue listing every appliance
+
+
+def issue_translation_placeholders(failed: FailedDevice, name: str | None) -> dict[str, str]:
+    """Translation placeholders for one appliance's repair issue.
+
+    `name` is the name Home Assistant shows for the appliance, or its type
+    when it has never been set up.
+    """
     return {
-        "count": str(len(failed)),
-        "devices": "\n".join(f"{f.fab}: {f.reason}" for f in failed),
+        "name": name or failed.fab,
+        "appliance": appliance_label(failed.fab, name),
+        "reason": failed.reason,
     }
 
 

@@ -109,3 +109,21 @@ def test_manual_entry_contacts_nothing(clients) -> None:
     hass = _hass({FAB: "192.0.2.10"})
     asyncio.run(miele_lan.async_remove_entry(hass, _entry(flow_kind="manual")))
     assert clients == []
+
+
+def test_removing_the_entry_deletes_every_appliance_issue(clients, monkeypatch) -> None:
+    deleted: list[str] = []
+    monkeypatch.setattr(
+        miele_lan.ir, "async_delete_issue", lambda hass, domain, issue_id: deleted.append(issue_id),
+    )
+    entry = _entry(static_ips={"000000000003": "192.0.2.30"})
+    entry.data["devices"] = [{"fabNr": "000000000002"}]
+
+    asyncio.run(miele_lan.async_remove_entry(_hass({FAB: "192.0.2.10"}), entry))
+
+    assert sorted(deleted) == [
+        "unenrolled_devices_entry",
+        f"unenrolled_entry_{FAB}",
+        "unenrolled_entry_000000000002",
+        "unenrolled_entry_000000000003",
+    ]
