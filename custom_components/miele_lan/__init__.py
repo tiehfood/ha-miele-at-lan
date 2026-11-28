@@ -51,6 +51,7 @@ from .push_listener import (
     MielePushListener,
     PushEvent,
     detect_lan_ip,
+    detect_lan_ip_toward,
     resolve_advertise_ip,
     synthetic_mac_hostname,
 )
@@ -144,17 +145,12 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # HA's LAN-facing IP on the interface that routes toward the appliances.
     # If we know any appliance IP, route toward it (multi-homed boxes pick the
-    # right interface). Otherwise just toward a public IP.
+    # right interface). Otherwise toward a public IP for now; once the mDNS
+    # browse below has found an appliance, setup routes toward that instead.
     route_target = next(iter(static_ips.values()), None) or "1.1.1.1"
     detected_ip = detect_lan_ip(route_target)
     ha_lan_ip, advertise_is_configured = resolve_advertise_ip(
         configured=entry.options.get(CONF_ADVERTISE_ADDRESS), detected=detected_ip,
-    )
-    _LOGGER.info(
-        "push listener will advertise %s (%s) — this is also the address "
-        "excluded from mDNS discovery to avoid self-adoption",
-        ha_lan_ip,
-        "configured via advertise address option" if advertise_is_configured else "auto-detected",
     )
 
     bundle: dict[str, Any] = {
@@ -186,6 +182,23 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         exclude_ip_is_configured=advertise_is_configured,
     )
     mdns_static = {r["fabNr"]: r["host"] for r in mdns_results if r.get("fabNr")}
+    advertise_source = (
+        "configured via advertise address option" if advertise_is_configured
+        else f"auto-detected, routing toward {route_target}"
+    )
+    if not advertise_is_configured and not static_ips:
+        # The public-IP route above picks the default route's interface. On a
+        # host with several networks the appliances can sit on another one,
+        # and then they cannot reach the address we advertise. Route toward
+        # an appliance that just answered instead. Our own listener is not
+        # running yet; the browse excluded the first guess, and the
+        # `ha_fab` and device-type checks there catch our advertisement at
+        # any address.
+        toward = detect_lan_ip_toward(mdns_static.values())
+        if toward:
+            ha_lan_ip = toward
+            advertise_source = "auto-detected, routing toward the appliances mDNS found"
+    _LOGGER.info("push listener will advertise %s (%s)", ha_lan_ip, advertise_source)
     if mdns_static:
         _LOGGER.info("mDNS resolved %d fab→IP mapping(s): %s",
                      len(mdns_static), mdns_static)
