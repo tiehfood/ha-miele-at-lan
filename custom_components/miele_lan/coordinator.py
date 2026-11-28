@@ -346,10 +346,18 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 ):
                     self._ident_loaded = True
             await self._maybe_refresh_wlan()
-            await self._maybe_refresh_hours_of_operation()
-            await self._maybe_refresh_device_context()
-            await self._maybe_fetch_program_list()
-            await self._maybe_refresh_hood_filters()
+            # The first refresh runs inside setup, which waits for it. The
+            # optional DOP2 and filter reads can take a full timeout there
+            # (2/1585 times out on some washers and dryers on every start),
+            # so they start with the next poll, at most a minute later. Their
+            # entities are added once their data arrives (see
+            # sensor._new_late_entities and its binary_sensor/select
+            # counterparts).
+            if self._poll_ever_succeeded:
+                await self._maybe_refresh_hours_of_operation()
+                await self._maybe_refresh_device_context()
+                await self._maybe_fetch_program_list()
+                await self._maybe_refresh_hood_filters()
         except Exception as err:  # noqa: BLE001
             self._consecutive_poll_failures += 1
             # Never-succeeded appliances raise immediately so first refresh
