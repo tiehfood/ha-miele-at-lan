@@ -467,6 +467,13 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     missing = expected_fabs - set(bundle["coordinators"])
     note_setup_result(hass, entry.entry_id, missing)
     if missing:
+        # Where each missed appliance was last seen: configured statically,
+        # found by this setup's mDNS browse, or enrolled by an earlier setup
+        # (or by this one, for an appliance whose first refresh failed).
+        known_addresses = {
+            **hass.data.get(DATA_ENROLLED_HOSTS, {}).get(entry.entry_id, {}),
+            **merged_static_ips,
+        }
         watcher = MissedApplianceWatcher(
             hass=hass,
             entry_id=entry.entry_id,
@@ -474,6 +481,9 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Only working appliances: a missed one's announcements must count.
             enrolled_ips={
                 ed.host_ip for ed in enrolled if ed.fab in bundle["coordinators"]
+            },
+            known_addresses={
+                fab: ip for fab, ip in known_addresses.items() if fab in missing
             },
             group_id=group_id,
             exclude_ha_fab=ha_fab,

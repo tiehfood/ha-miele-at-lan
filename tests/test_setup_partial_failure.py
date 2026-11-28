@@ -191,3 +191,37 @@ def test_setup_tells_the_recovery_backoff_what_it_missed(monkeypatch) -> None:
 
     assert hass.data[DATA_RECOVERY_RELOADS]["entry1"].gap == 600.0
 
+
+def test_watcher_gets_the_known_addresses_of_missed_appliances(monkeypatch) -> None:
+    """Where mDNS does not reach Home Assistant, addresses are configured by
+    hand and no announcement will come; the watcher has to probe those."""
+    from custom_components.miele_lan.const import CONF_STATIC_IPS
+    from custom_components.miele_lan.enrollment_report import FailedDevice
+
+    off = "000100000003"
+    seen: list[dict] = []
+
+    class _RecordingWatcher(_Watcher):
+        def __init__(self, *, known_addresses, **kwargs) -> None:
+            super().__init__(**kwargs)
+            seen.append(known_addresses)
+
+    class _StaticEntry(_Entry):
+        data = {**_Entry.data, "devices": [{"fabNr": GOOD}, {"fabNr": FLAKY}, {"fabNr": off}]}
+        options = MappingProxyType({
+            "advertise_address": "203.0.113.226",
+            CONF_STATIC_IPS: {off: "203.0.113.3"},
+        })
+
+    _patch_setup(
+        monkeypatch,
+        failed=[FailedDevice(fab=off, reason="signed verify failed")],
+        watcher=_RecordingWatcher,
+    )
+
+    assert asyncio.run(miele_lan._setup_cloud(_Hass(), _StaticEntry())) is True
+
+    # The configured address of the appliance that could not be enrolled, and
+    # the enrolled address of the one whose first refresh failed. Not the
+    # working appliance's.
+    assert seen == [{off: "203.0.113.3", FLAKY: "203.0.113.2"}]

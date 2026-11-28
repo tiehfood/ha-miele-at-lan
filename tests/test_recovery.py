@@ -290,3 +290,50 @@ def test_gap_starts_over_once_the_appliance_is_back(monkeypatch) -> None:
     note_setup_result(hass, "entry1", set())
     assert "entry1" not in hass.data[DATA_RECOVERY_RELOADS]
 
+
+def test_known_address_is_checked_without_mdns() -> None:
+    """Addresses configured by hand because mDNS does not reach Home
+    Assistant: no announcement will ever come, so the watcher has to check
+    the address setup already knows."""
+    probed: list[str] = []
+
+    async def _probe(ip):
+        probed.append(ip)
+        return [MISSING]
+
+    hass = _FakeHass()
+
+    async def _main():
+        watcher = _watcher(
+            hass, probe=_probe, zeroconf=None, check_interval=0.05,
+            known_addresses={
+                MISSING: MISSING_IP,
+                "000100000009": "203.0.113.9",  # not missing: never probed
+            },
+        )
+        await watcher.async_start()
+        await asyncio.sleep(0.1)
+        await watcher.async_stop()
+
+    _run(_main)
+
+    assert probed == [MISSING_IP]
+    assert hass.config_entries.reloads == ["entry1"]
+
+
+def test_known_address_of_a_working_appliance_is_not_checked() -> None:
+    hass = _FakeHass()
+
+    async def _main():
+        # _no_probe fails the test if the enrolled address is probed.
+        watcher = _watcher(
+            hass, zeroconf=None, check_interval=0.02,
+            known_addresses={MISSING: ENROLLED_IP},
+        )
+        await watcher.async_start()
+        await asyncio.sleep(0.05)
+        await watcher.async_stop()
+
+    _run(_main)
+
+    assert hass.config_entries.reloads == []

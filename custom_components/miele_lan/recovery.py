@@ -14,7 +14,10 @@ normal setup path:
   * an mDNS announcement of a household appliance at an address that is not
     enrolled, confirmed with one signed `GET /Devices` naming a missed fab;
   * a periodic re-check of those unenrolled addresses, for an appliance that
-    announced itself but did not answer at that moment.
+    announced itself but did not answer at that moment. The addresses setup
+    already knows for the missed appliances (configured statically, found by
+    mDNS, or where an earlier setup enrolled them) are checked from the
+    start, so recovery also works where mDNS does not reach Home Assistant.
 
 Reloads are rate-limited per config entry, and the limit is kept across the
 reloads themselves. The gap starts at `MIN_RELOAD_GAP` and doubles, up to
@@ -109,6 +112,7 @@ class MissedApplianceWatcher:
         entry_id: str,
         missing_fabs: set[str],
         enrolled_ips: set[str],
+        known_addresses: dict[str, str] | None = None,
         group_id: str,
         exclude_ha_fab: str,
         probe: Probe,
@@ -130,7 +134,12 @@ class MissedApplianceWatcher:
         self._check_interval = check_interval
         self._min_reload_gap = min_reload_gap
         self._announce_debounce = announce_debounce
-        self._candidates: set[str] = set()  # unenrolled household IPs seen on mDNS
+        # Unenrolled household IPs to probe: where setup last knew the missed
+        # appliances to be, plus whatever announces itself on mDNS later.
+        self._candidates: set[str] = {
+            ip for fab, ip in (known_addresses or {}).items()
+            if fab in self._missing and ip not in self._enrolled_ips
+        }
         self._browser: Any | None = None
         self._tasks: set[asyncio.Task] = set()
         self._probe_scheduled = False
@@ -145,7 +154,9 @@ class MissedApplianceWatcher:
             return
         _LOGGER.info(
             "watching for missed appliance(s) %s — the integration reloads "
-            "once one is reachable", ", ".join(sorted(self._missing)),
+            "once one is reachable%s", ", ".join(sorted(self._missing)),
+            f" (checking {', '.join(sorted(self._candidates))} every "
+            f"{self._check_interval / 60:.0f} min)" if self._candidates else "",
         )
         self._spawn(self._periodic_checks(), "periodic re-check")
         if self._zc is None:
