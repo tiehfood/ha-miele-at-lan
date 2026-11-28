@@ -7,7 +7,6 @@ unit-tested without pulling in any of those.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 
@@ -43,20 +42,26 @@ def appliance_label(fab: str, name: str | None) -> str:
     return f"{name} ({fab})" if name else fab
 
 
-def issue_translation_placeholders(
-    failed: list[FailedDevice], names: Mapping[str, str | None] | None = None
-) -> dict[str, str]:
-    """Translation placeholders for the `unenrolled_devices` repair issue.
+def issue_id(entry_id: str, fab: str) -> str:
+    """One repair issue per appliance, so ignoring one sticks, and so an
+    issue is only deleted once that appliance is really set up."""
+    return f"{ISSUE_ID_PREFIX}{entry_id}_{fab}"
 
-    `names` maps fab numbers to the name Home Assistant shows for the
-    appliance, or its type when it has never been set up.
+
+ISSUE_ID_PREFIX = "unenrolled_"
+LEGACY_ISSUE_ID_PREFIX = "unenrolled_devices_"  # one issue listing every appliance
+
+
+def issue_translation_placeholders(failed: FailedDevice, name: str | None) -> dict[str, str]:
+    """Translation placeholders for one appliance's repair issue.
+
+    `name` is the name Home Assistant shows for the appliance, or its type
+    when it has never been set up.
     """
-    names = names or {}
     return {
-        "count": str(len(failed)),
-        "devices": "\n".join(
-            f"- {appliance_label(f.fab, names.get(f.fab))}: {f.reason}" for f in failed
-        ),
+        "name": name or failed.fab,
+        "appliance": appliance_label(failed.fab, name),
+        "reason": failed.reason,
     }
 
 

@@ -109,11 +109,16 @@ class _Entry:
         return asyncio.get_running_loop().create_task(coro)
 
 
+DELETED_ISSUES: list[str] = []
+
+
 def _patch_setup(monkeypatch, *, failed=(), watcher=_Watcher) -> list[dict]:
     """Patch everything `_setup_cloud` touches on the network: GOOD and FLAKY
     enrol (FLAKY then fails its first refresh), `failed` could not be
-    enrolled. Returns the repair issues raised."""
+    enrolled. Returns the repair issues raised; DELETED_ISSUES collects the
+    ids of the ones deleted."""
     issues: list[dict] = []
+    DELETED_ISSUES.clear()
 
     async def _zc(hass):
         return object()
@@ -144,9 +149,12 @@ def _patch_setup(monkeypatch, *, failed=(), watcher=_Watcher) -> list[dict]:
     )
     monkeypatch.setattr(
         miele_lan.ir, "async_create_issue",
-        lambda hass, domain, issue_id, **kwargs: issues.append(kwargs),
+        lambda hass, domain, issue_id, **kwargs: issues.append({"issue_id": issue_id, **kwargs}),
     )
-    monkeypatch.setattr(miele_lan.ir, "async_delete_issue", lambda *a, **k: None)
+    monkeypatch.setattr(
+        miele_lan.ir, "async_delete_issue",
+        lambda hass, domain, issue_id: DELETED_ISSUES.append(issue_id),
+    )
     monkeypatch.setattr(miele_lan, "registered_appliance_name", lambda hass, fab: None)
     _Client.closed.clear()
     _Watcher.created.clear()
@@ -169,9 +177,9 @@ def test_flaky_first_refresh_leaves_only_that_appliance_out(monkeypatch) -> None
     assert [c.host for c in bundle["clients"]] == ["203.0.113.1"]
     assert _Client.closed == ["203.0.113.2"]
     assert _Watcher.created == [{FLAKY}]
-    assert len(issues) == 1
-    assert FLAKY in issues[0]["translation_placeholders"]["devices"]
-    assert "first refresh failed" in issues[0]["translation_placeholders"]["devices"]
+    assert [i["issue_id"] for i in issues] == [f"unenrolled_entry1_{FLAKY}"]
+    assert issues[0]["translation_placeholders"]["appliance"] == FLAKY
+    assert "first refresh failed" in issues[0]["translation_placeholders"]["reason"]
 
 
 def test_setup_tells_the_recovery_backoff_what_it_missed(monkeypatch) -> None:
@@ -254,9 +262,24 @@ def test_issue_names_appliances_like_home_assistant_does(monkeypatch) -> None:
 
     assert asyncio.run(miele_lan._setup_cloud(_Hass(), _TypedEntry())) is True
 
-    devices = issues[0]["translation_placeholders"]["devices"]
-    assert f"- Dishwasher ({off}): no LAN IP found" in devices
-    assert f"- Downstairs dryer ({FLAKY}): first refresh failed" in devices
+    placeholders = {i["issue_id"]: i["translation_placeholders"] for i in issues}
+    assert placeholders[f"unenrolled_entry1_{off}"]["appliance"] == f"Dishwasher ({off})"
+    assert placeholders[f"unenrolled_entry1_{FLAKY}"]["name"] == "Downstairs dryer"
+    assert placeholders[f"unenrolled_entry1_{FLAKY}"]["appliance"] == (
+        f"Downstairs dryer ({FLAKY})"
+    )
+
+
+def test_only_an_appliance_that_set_up_has_its_issue_deleted(monkeypatch) -> None:
+    """Deleting an issue and creating it again shows it as a new one and
+    forgets that the user ignored it, so a missing appliance's issue is left
+    alone. The issue that used to list every appliance goes away."""
+    issues = _patch_setup(monkeypatch)
+
+    assert asyncio.run(miele_lan._setup_cloud(_Hass(), _Entry())) is True
+
+    assert sorted(DELETED_ISSUES) == ["unenrolled_devices_entry1", f"unenrolled_entry1_{GOOD}"]
+    assert [i["issue_id"] for i in issues] == [f"unenrolled_entry1_{FLAKY}"]
 
 
 def test_registered_appliance_name_prefers_the_users_name(monkeypatch) -> None:

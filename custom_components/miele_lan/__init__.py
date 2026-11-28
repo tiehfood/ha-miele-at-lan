@@ -49,7 +49,13 @@ from .enrollment import (
     mdns_discover_household,
     mdns_household_ids,
 )
-from .enrollment_report import FailedDevice, issue_translation_placeholders, summary_line
+from .enrollment_report import (
+    LEGACY_ISSUE_ID_PREFIX,
+    FailedDevice,
+    issue_id,
+    issue_translation_placeholders,
+    summary_line,
+)
 from .entity import model_label
 from .recovery import MissedApplianceWatcher, note_setup_result
 from .push_listener import (
@@ -421,31 +427,30 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "network blocks mDNS/multicast."
         )
 
-    issue_id = f"unenrolled_devices_{entry.entry_id}"
     failed = enrollment_result.failed + refresh_failed
     line = summary_line(len(bundle["coordinators"]), failed)
-    if failed:
-        _LOGGER.warning(line)
-        device_types = {
-            d.get("fabNr") or d.get("fab"): d.get("deviceType") for d in devices
-        }
-        names = {
-            f.fab: registered_appliance_name(hass, f.fab)
-            or model_label(device_types.get(f.fab))
-            for f in failed
-        }
+    _LOGGER.log(logging.WARNING if failed else logging.INFO, line)
+    # Earlier versions listed every appliance in one issue, which was deleted
+    # and created again whenever that list changed.
+    ir.async_delete_issue(hass, DOMAIN, f"{LEGACY_ISSUE_ID_PREFIX}{entry.entry_id}")
+    device_types = {d.get("fabNr") or d.get("fab"): d.get("deviceType") for d in devices}
+    for f in failed:
         ir.async_create_issue(
             hass,
             DOMAIN,
-            issue_id,
+            issue_id(entry.entry_id, f.fab),
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
-            translation_key="unenrolled_devices",
-            translation_placeholders=issue_translation_placeholders(failed, names),
+            translation_key="appliance_not_set_up",
+            translation_placeholders=issue_translation_placeholders(
+                f,
+                registered_appliance_name(hass, f.fab)
+                or model_label(device_types.get(f.fab)),
+            ),
         )
-    else:
-        _LOGGER.info(line)
-        ir.async_delete_issue(hass, DOMAIN, issue_id)
+    # Only an appliance that set up is known to be fine again.
+    for fab in bundle["coordinators"]:
+        ir.async_delete_issue(hass, DOMAIN, issue_id(entry.entry_id, fab))
 
     bundle["options_unsub"] = entry.add_update_listener(_async_options_updated)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = bundle
@@ -570,8 +575,13 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     every appliance and disabling our SuperVision peer entry. Best-effort —
     failures are logged but never block removal.
     """
-    ir.async_delete_issue(hass, DOMAIN, f"unenrolled_devices_{entry.entry_id}")
     enrolled_hosts = hass.data.get(DATA_ENROLLED_HOSTS, {}).pop(entry.entry_id, {})
+    ir.async_delete_issue(hass, DOMAIN, f"{LEGACY_ISSUE_ID_PREFIX}{entry.entry_id}")
+    known_fabs = {
+        d.get("fabNr") or d.get("fab") for d in entry.data.get(CONF_DEVICES) or []
+    } | set(enrolled_hosts) | set(entry.options.get(CONF_STATIC_IPS) or {})
+    for fab in sorted(f for f in known_fabs if f):
+        ir.async_delete_issue(hass, DOMAIN, issue_id(entry.entry_id, fab))
     if entry.data.get("flow_kind") != "cloud":
         return
     group_id = entry.data.get(CONF_GROUP_ID)

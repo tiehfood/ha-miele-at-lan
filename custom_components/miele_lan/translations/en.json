@@ -2374,9 +2374,9 @@
     }
   },
   "issues": {
-    "unenrolled_devices": {
-      "title": "{count} Miele appliance(s) could not be set up",
-      "description": "Miele@LAN could not set up these appliances from your Miele household:\n\n{devices}\n\nThis is usually temporary: the appliance is switched off, or its Wi-Fi connection dropped. Other appliances are not affected. Miele@LAN keeps checking and sets an appliance up on its own as soon as it answers. This issue then goes away."
+    "appliance_not_set_up": {
+      "title": "{name} could not be set up",
+      "description": "Miele@LAN could not set up {appliance} from your Miele household:\n\n{reason}\n\nThis is usually temporary: the appliance is switched off, or its Wi-Fi connection dropped. Miele@LAN keeps checking and sets it up on its own as soon as it answers. This issue then goes away."
     }
   }
 }

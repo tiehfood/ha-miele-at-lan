@@ -2374,9 +2374,9 @@
     }
   },
   "issues": {
-    "unenrolled_devices": {
-      "title": "{count} Miele-Gerät(e) konnten nicht eingerichtet werden",
-      "description": "Miele@LAN konnte diese Geräte aus deinem Miele-Haushalt nicht einrichten:\n\n{devices}\n\nDas ist meist vorübergehend: Das Gerät ist ausgeschaltet oder seine WLAN-Verbindung ist abgerissen. Andere Geräte sind nicht betroffen. Miele@LAN prüft weiter und richtet ein Gerät von selbst ein, sobald es antwortet. Dieses Problem verschwindet dann."
+    "appliance_not_set_up": {
+      "title": "{name} konnte nicht eingerichtet werden",
+      "description": "Miele@LAN konnte {appliance} aus deinem Miele-Haushalt nicht einrichten:\n\n{reason}\n\nDas ist meist vorübergehend: Das Gerät ist ausgeschaltet oder seine WLAN-Verbindung ist abgerissen. Miele@LAN prüft weiter und richtet es von selbst ein, sobald es antwortet. Dieses Problem verschwindet dann."
     }
   }
 }

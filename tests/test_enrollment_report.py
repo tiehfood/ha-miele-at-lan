@@ -56,41 +56,29 @@ def test_summary_line_multiple_missing_are_semicolon_joined() -> None:
 
 
 # ------------------------------------------------- issue_translation_placeholders
-def test_placeholders_empty_when_nothing_failed() -> None:
-    placeholders = er.issue_translation_placeholders([])
-    assert placeholders == {"count": "0", "devices": ""}
-
-
-def test_placeholders_count_matches_failed_list_length() -> None:
-    failed = [
-        er.FailedDevice(fab=FAB, reason=REASON),
-        er.FailedDevice(fab=OTHER_FAB, reason=OTHER_REASON),
-    ]
-    placeholders = er.issue_translation_placeholders(failed)
-    assert placeholders["count"] == "2"
-
-
-def test_placeholders_devices_lists_fab_and_reason_per_line() -> None:
-    failed = [
-        er.FailedDevice(fab=FAB, reason=REASON),
-        er.FailedDevice(fab=OTHER_FAB, reason=OTHER_REASON),
-    ]
-    placeholders = er.issue_translation_placeholders(failed)
-    assert placeholders["devices"] == f"- {FAB}: {REASON}\n- {OTHER_FAB}: {OTHER_REASON}"
-
-
-def test_placeholders_name_each_appliance_before_its_fab() -> None:
+def test_placeholders_name_the_appliance_before_its_fab() -> None:
     """A fab number alone does not tell the user which appliance it is."""
-    failed = [
-        er.FailedDevice(fab=FAB, reason=REASON),
-        er.FailedDevice(fab=OTHER_FAB, reason=OTHER_REASON),
-    ]
     placeholders = er.issue_translation_placeholders(
-        failed, {FAB: "Dishwasher", OTHER_FAB: None}
+        er.FailedDevice(fab=FAB, reason=REASON), "Dishwasher"
     )
-    assert placeholders["devices"] == (
-        f"- Dishwasher ({FAB}): {REASON}\n- {OTHER_FAB}: {OTHER_REASON}"
+    assert placeholders == {
+        "name": "Dishwasher",
+        "appliance": f"Dishwasher ({FAB})",
+        "reason": REASON,
+    }
+
+
+def test_placeholders_fall_back_to_the_fab_without_a_name() -> None:
+    placeholders = er.issue_translation_placeholders(
+        er.FailedDevice(fab=OTHER_FAB, reason=OTHER_REASON), None
     )
+    assert placeholders == {"name": OTHER_FAB, "appliance": OTHER_FAB, "reason": OTHER_REASON}
+
+
+def test_issue_id_is_per_entry_and_appliance() -> None:
+    assert er.issue_id("entry1", FAB) == f"unenrolled_entry1_{FAB}"
+    assert er.issue_id("entry1", FAB) != er.issue_id("entry1", OTHER_FAB)
+    assert not er.issue_id("entry1", FAB).startswith(er.LEGACY_ISSUE_ID_PREFIX)
 
 
 # ------------------------------------------------------- refine_failure_reason
