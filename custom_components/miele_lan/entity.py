@@ -47,6 +47,13 @@ _MODEL_LABELS: dict[MieleAppliance, str] = {
 }
 
 
+def model_label(device_type: int | None) -> str | None:
+    """Human-readable label for a Miele device type ("Dishwasher"), or None."""
+    if device_type is None:
+        return None
+    return _MODEL_LABELS.get(device_type)  # type: ignore[call-overload]
+
+
 class MieleLanEntity(CoordinatorEntity[MieleLanCoordinator]):
     """Base for all Miele@LAN entities."""
 

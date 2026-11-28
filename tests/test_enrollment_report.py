@@ -76,7 +76,21 @@ def test_placeholders_devices_lists_fab_and_reason_per_line() -> None:
         er.FailedDevice(fab=OTHER_FAB, reason=OTHER_REASON),
     ]
     placeholders = er.issue_translation_placeholders(failed)
-    assert placeholders["devices"] == f"{FAB}: {REASON}\n{OTHER_FAB}: {OTHER_REASON}"
+    assert placeholders["devices"] == f"- {FAB}: {REASON}\n- {OTHER_FAB}: {OTHER_REASON}"
+
+
+def test_placeholders_name_each_appliance_before_its_fab() -> None:
+    """A fab number alone does not tell the user which appliance it is."""
+    failed = [
+        er.FailedDevice(fab=FAB, reason=REASON),
+        er.FailedDevice(fab=OTHER_FAB, reason=OTHER_REASON),
+    ]
+    placeholders = er.issue_translation_placeholders(
+        failed, {FAB: "Dishwasher", OTHER_FAB: None}
+    )
+    assert placeholders["devices"] == (
+        f"- Dishwasher ({FAB}): {REASON}\n- {OTHER_FAB}: {OTHER_REASON}"
+    )
 
 
 # ------------------------------------------------------- refine_failure_reason

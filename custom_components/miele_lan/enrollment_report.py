@@ -7,6 +7,7 @@ unit-tested without pulling in any of those.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 
@@ -33,11 +34,29 @@ def summary_line(enrolled_count: int, failed: list[FailedDevice]) -> str:
     return f"enrolled {enrolled_count} of {total} appliances — missing {missing}"
 
 
-def issue_translation_placeholders(failed: list[FailedDevice]) -> dict[str, str]:
-    """Translation placeholders for the `unenrolled_devices` repair issue."""
+def appliance_label(fab: str, name: str | None) -> str:
+    """How the repair issue names an appliance: "Dishwasher (000100000002)".
+
+    The fab number alone tells a user nothing about which appliance it is;
+    it stays in brackets because it is what the logs and the Miele app use.
+    """
+    return f"{name} ({fab})" if name else fab
+
+
+def issue_translation_placeholders(
+    failed: list[FailedDevice], names: Mapping[str, str | None] | None = None
+) -> dict[str, str]:
+    """Translation placeholders for the `unenrolled_devices` repair issue.
+
+    `names` maps fab numbers to the name Home Assistant shows for the
+    appliance, or its type when it has never been set up.
+    """
+    names = names or {}
     return {
         "count": str(len(failed)),
-        "devices": "\n".join(f"{f.fab}: {f.reason}" for f in failed),
+        "devices": "\n".join(
+            f"- {appliance_label(f.fab, names.get(f.fab))}: {f.reason}" for f in failed
+        ),
     }
 
 

@@ -21,6 +21,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -49,6 +50,7 @@ from .enrollment import (
     mdns_household_ids,
 )
 from .enrollment_report import FailedDevice, issue_translation_placeholders, summary_line
+from .entity import model_label
 from .recovery import MissedApplianceWatcher, note_setup_result
 from .push_listener import (
     MielePushListener,
@@ -424,6 +426,14 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     line = summary_line(len(bundle["coordinators"]), failed)
     if failed:
         _LOGGER.warning(line)
+        device_types = {
+            d.get("fabNr") or d.get("fab"): d.get("deviceType") for d in devices
+        }
+        names = {
+            f.fab: registered_appliance_name(hass, f.fab)
+            or model_label(device_types.get(f.fab))
+            for f in failed
+        }
         ir.async_create_issue(
             hass,
             DOMAIN,
@@ -431,7 +441,7 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key="unenrolled_devices",
-            translation_placeholders=issue_translation_placeholders(failed),
+            translation_placeholders=issue_translation_placeholders(failed, names),
         )
     else:
         _LOGGER.info(line)
@@ -498,6 +508,15 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         bundle["recovery"] = watcher
         await watcher.async_start()
     return True
+
+
+def registered_appliance_name(hass: HomeAssistant, fab: str) -> str | None:
+    """The name Home Assistant shows for this appliance's device (the user's
+    own name first), or None if it has never been set up here."""
+    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, fab)})
+    if device is None:
+        return None
+    return device.name_by_user or device.name
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:

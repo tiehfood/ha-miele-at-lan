@@ -135,6 +135,7 @@ def _patch_setup(monkeypatch, *, refresh, cleanup=None) -> list[str]:
     )
     monkeypatch.setattr(miele_lan.ir, "async_create_issue", lambda *a, **k: None)
     monkeypatch.setattr(miele_lan.ir, "async_delete_issue", lambda *a, **k: None)
+    monkeypatch.setattr(miele_lan, "registered_appliance_name", lambda hass, fab: None)
     return events
 
 

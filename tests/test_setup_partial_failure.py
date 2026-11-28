@@ -147,6 +147,7 @@ def _patch_setup(monkeypatch, *, failed=(), watcher=_Watcher) -> list[dict]:
         lambda hass, domain, issue_id, **kwargs: issues.append(kwargs),
     )
     monkeypatch.setattr(miele_lan.ir, "async_delete_issue", lambda *a, **k: None)
+    monkeypatch.setattr(miele_lan, "registered_appliance_name", lambda hass, fab: None)
     _Client.closed.clear()
     _Watcher.created.clear()
     return issues
@@ -225,3 +226,55 @@ def test_watcher_gets_the_known_addresses_of_missed_appliances(monkeypatch) -> N
     # the enrolled address of the one whose first refresh failed. Not the
     # working appliance's.
     assert seen == [{off: "203.0.113.3", FLAKY: "203.0.113.2"}]
+
+
+def test_issue_names_appliances_like_home_assistant_does(monkeypatch) -> None:
+    """The user's own device name first, then the type from the cloud list."""
+    from custom_components.miele_lan.enrollment_report import FailedDevice
+
+    off = "000100000003"
+
+    class _TypedEntry(_Entry):
+        data = {
+            **_Entry.data,
+            "devices": [
+                {"fabNr": GOOD, "deviceType": 1},
+                {"fabNr": FLAKY, "deviceType": 2},
+                {"fabNr": off, "deviceType": 7},
+            ],
+        }
+
+    issues = _patch_setup(
+        monkeypatch, failed=[FailedDevice(fab=off, reason="no LAN IP found")]
+    )
+    monkeypatch.setattr(
+        miele_lan, "registered_appliance_name",
+        lambda hass, fab: "Downstairs dryer" if fab == FLAKY else None,
+    )
+
+    assert asyncio.run(miele_lan._setup_cloud(_Hass(), _TypedEntry())) is True
+
+    devices = issues[0]["translation_placeholders"]["devices"]
+    assert f"- Dishwasher ({off}): no LAN IP found" in devices
+    assert f"- Downstairs dryer ({FLAKY}): first refresh failed" in devices
+
+
+def test_registered_appliance_name_prefers_the_users_name(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    devices = {
+        GOOD: SimpleNamespace(name="Washing Machine", name_by_user="Basement washer"),
+        FLAKY: SimpleNamespace(name="Tumble Dryer", name_by_user=None),
+    }
+
+    class _Registry:
+        def async_get_device(self, *, identifiers):
+            ((domain, fab),) = identifiers
+            assert domain == miele_lan.DOMAIN
+            return devices.get(fab)
+
+    monkeypatch.setattr(miele_lan.dr, "async_get", lambda hass: _Registry())
+
+    assert miele_lan.registered_appliance_name(None, GOOD) == "Basement washer"
+    assert miele_lan.registered_appliance_name(None, FLAKY) == "Tumble Dryer"
+    assert miele_lan.registered_appliance_name(None, "000100000009") is None

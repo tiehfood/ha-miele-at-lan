@@ -2375,8 +2375,8 @@
   },
   "issues": {
     "unenrolled_devices": {
-      "title": "{count} Miele appliance(s) could not be enrolled",
-      "description": "Miele@LAN could not finish setting up the following appliance(s). They are known to your Miele cloud household but currently have no coordinator and no device card in Home Assistant:\n\n{devices}\n\nThis is usually transient (appliance offline, mDNS didn't answer, wrong household key). Working appliances are unaffected. Reload the integration once the appliance is reachable again — this issue clears automatically once every appliance enrolls."
+      "title": "{count} Miele appliance(s) could not be set up",
+      "description": "Miele@LAN could not set up these appliances from your Miele household:\n\n{devices}\n\nThis is usually temporary: the appliance is switched off, or its Wi-Fi connection dropped. Other appliances are not affected. Miele@LAN keeps checking and sets an appliance up on its own as soon as it answers. This issue then goes away."
     }
   }
 }
