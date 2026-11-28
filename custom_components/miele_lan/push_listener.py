@@ -23,11 +23,12 @@ import binascii
 import datetime as dt
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import re
 import socket
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -85,6 +86,19 @@ def detect_lan_ip(target_ip: str) -> str:
         return s.getsockname()[0]
     finally:
         s.close()
+
+
+def detect_lan_ip_toward(hosts: Iterable[str]) -> str | None:
+    """The local IP that routes to the first IPv4 address in `hosts`, or
+    None if none of them is one we can route to."""
+    for host in hosts:
+        try:
+            if ipaddress.ip_address(host).version != 4:
+                continue
+            return detect_lan_ip(host)
+        except (ValueError, OSError):
+            continue
+    return None
 
 
 def resolve_advertise_ip(*, configured: str | None, detected: str) -> tuple[str, bool]:
@@ -579,5 +593,6 @@ __all__ = [
     "PushCallback",
     "synthetic_mac_hostname",
     "detect_lan_ip",
+    "detect_lan_ip_toward",
     "resolve_advertise_ip",
 ]
