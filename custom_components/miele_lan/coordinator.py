@@ -13,15 +13,28 @@ household.
 from __future__ import annotations
 
 import asyncio
+import errno
 import logging
 import time
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
+from asyncmiele.exceptions.network import NetworkConnectionError, NetworkTimeoutError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import update_coordinator
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
+# Home Assistant's log-when-unavailable rule asks integrations to raise
+# UpdateFailedUnreachable when the device can't be reached; the coordinator
+# then logs the outage once at info, and the recovery once at info. Releases
+# before it existed get plain UpdateFailed, which the coordinator logs once
+# at error instead.
+# https://contributors.home-assistant.io/core/quality-scale/log-when-unavailable/
+UpdateFailedUnreachable: type[UpdateFailed] = getattr(
+    update_coordinator, "UpdateFailedUnreachable", UpdateFailed
+)
 
 from .api import ActionRejectedError, MieleLanClient
 from .const import (
@@ -77,9 +90,30 @@ def _describe_update_error(err: Exception) -> str:
     `str(err)` alone can be empty — a bare `TimeoutError()` is the common
     case — which renders the coordinator's "Error fetching ... data:" log
     line with nothing after the colon.
+
+    The OS error code is appended when one is in the cause chain. aiohttp's
+    "Connect call failed" message drops it, and it is what tells a device
+    that left the network (EHOSTUNREACH) from one whose web server is not
+    listening (ECONNREFUSED).
     """
     msg = str(err)
-    return f"{type(err).__name__}: {msg}" if msg else type(err).__name__
+    text = f"{type(err).__name__}: {msg}" if msg else type(err).__name__
+    code = _os_errno(err)
+    if code is not None:
+        text += f" [{errno.errorcode.get(code, f'errno {code}')}]"
+    return text
+
+
+def _os_errno(err: BaseException) -> int | None:
+    """First OS error code found in `err` or the exceptions that caused it."""
+    seen: set[int] = set()
+    current: BaseException | None = err
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, OSError) and current.errno is not None:
+            return current.errno
+        current = current.__cause__ or current.__context__
+    return None
 
 
 @dataclass
@@ -358,7 +392,11 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                 self._consecutive_poll_failures <= POLL_FAILURE_TOLERANCE
                 and self._poll_ever_succeeded
             ):
-                _LOGGER.warning(
+                # Debug, not warning: entities still show last-known state,
+                # nobody can act on it, and it usually clears on its own. If
+                # it doesn't, the coordinator logs the outage once when we
+                # raise below (HA's log-when-unavailable rule).
+                _LOGGER.debug(
                     "[%s] poll failed (%d/%d tolerated): %s — keeping last-known state",
                     self.fab,
                     self._consecutive_poll_failures,
@@ -366,6 +404,8 @@ class MieleLanCoordinator(DataUpdateCoordinator[MieleLanData]):
                     _describe_update_error(err),
                 )
                 return self._data
+            if isinstance(err, NetworkConnectionError | NetworkTimeoutError):
+                raise UpdateFailedUnreachable(_describe_update_error(err)) from err
             raise UpdateFailed(_describe_update_error(err)) from err
         self._consecutive_poll_failures = 0
         self._poll_ever_succeeded = True
