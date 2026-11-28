@@ -24,7 +24,11 @@ from dataclasses import dataclass
 from typing import Any
 
 import aiohttp
-from asyncmiele.exceptions.network import NetworkConnectionError, NetworkTimeoutError
+from asyncmiele.exceptions.network import (
+    NetworkConnectionError,
+    NetworkTimeoutError,
+    ResponseError,
+)
 
 from .api import MieleLanClient
 from .const import MIELE_SERVICE_TYPES
@@ -123,6 +127,22 @@ async def _signed_subscription_post(
         return r.status, r.headers.get("Location", "")
 
 
+def is_transient_failure(err: BaseException) -> bool:
+    """Whether a failed request says nothing about the appliance's setup.
+
+    True when it did not answer, or answered that it was busy: a 5xx, such
+    as the 503 two appliances gave to a reload that came right after the
+    previous one. A wrong key or a household mismatch answers differently.
+    """
+    if isinstance(
+        err,
+        (NetworkTimeoutError, NetworkConnectionError, TimeoutError, aiohttp.ClientConnectionError),
+    ):
+        return True
+    status = getattr(err, "status_code", None) if isinstance(err, ResponseError) else None
+    return isinstance(status, int) and status >= 500
+
+
 async def enroll_device(
     *,
     fab: str,
@@ -159,6 +179,7 @@ async def enroll_device(
                         "signed verify failed — wrong key, appliance offline, "
                         "or not paired into this household"
                     ),
+                    transient=is_transient_failure(err),
                 )
             if fab not in devices:
                 _LOGGER.warning(
@@ -199,7 +220,9 @@ async def enroll_device(
                 _LOGGER.warning("[%s] SuperVision PUT raised: %s", fab, err)
     except Exception as err:
         _LOGGER.warning("[%s @ %s] enrollment dance failed: %s", fab, host_ip, err)
-        return FailedDevice(fab=fab, reason=f"enrollment failed: {err}")
+        return FailedDevice(
+            fab=fab, reason=f"enrollment failed: {err}", transient=is_transient_failure(err)
+        )
 
     # 3. Subscriptions — POST /Subscriptions to register our callback URLs.
     ok_resources: list[str] = []
@@ -389,6 +412,7 @@ async def enroll_all(
             return FailedDevice(
                 fab=fab,
                 reason="no LAN IP found (mDNS did not answer and no static IP is configured)",
+                transient=True,
             )
         return await enroll_device(
             fab=fab,

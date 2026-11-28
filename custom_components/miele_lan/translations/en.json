@@ -2376,7 +2376,11 @@
   "issues": {
     "appliance_not_set_up": {
       "title": "{name} could not be set up",
-      "description": "Miele@LAN could not set up {appliance} from your Miele household:\n\n{reason}\n\nThis is usually temporary: the appliance is switched off, or its Wi-Fi connection dropped. Miele@LAN keeps checking and sets it up on its own as soon as it answers. This issue then goes away."
+      "description": "{appliance} answered on your local network, but Miele@LAN could not set it up:\n\n{reason}\n\nThis issue goes away once the appliance is set up. Miele@LAN tries again when the integration reloads, and on its own when the appliance answers again."
+    },
+    "appliance_unreachable": {
+      "title": "Miele@LAN can't reach {name}",
+      "description": "{appliance} is in your Miele household, but Miele@LAN hasn't been able to reach it on your local network, so it isn't set up in Home Assistant yet:\n\n{reason}\n\nCheck that the appliance is switched on and connected to Wi-Fi. If mDNS doesn't reach Home Assistant on your network, enter the appliance's IP address in the integration's options.\n\nMiele@LAN keeps checking and sets the appliance up on its own as soon as it answers. This issue then goes away."
     }
   }
 }

@@ -385,7 +385,11 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if not isinstance(result, Exception):
                 continue
             _LOGGER.warning("[%s] first refresh failed, leaving it out: %s", fab, result)
-            refresh_failed.append(FailedDevice(fab=fab, reason=f"first refresh failed: {result}"))
+            # Its key worked a moment ago during enrollment, so this is the
+            # appliance or its connection, not its setup.
+            refresh_failed.append(
+                FailedDevice(fab=fab, reason=f"first refresh failed: {result}", transient=True)
+            )
             bundle["clients"].remove(client)
             try:
                 await client.__aexit__(None, None, None)
@@ -435,17 +439,22 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ir.async_delete_issue(hass, DOMAIN, f"{LEGACY_ISSUE_ID_PREFIX}{entry.entry_id}")
     device_types = {d.get("fabNr") or d.get("fab"): d.get("deviceType") for d in devices}
     for f in failed:
+        name = registered_appliance_name(hass, f.fab)
+        if f.transient and name is not None:
+            # Set up before: its device stays, with its entities unavailable
+            # until it answers, which is how Home Assistant shows a device it
+            # cannot reach. There is nothing for the user to fix, so no issue;
+            # one raised earlier is left as it is. The watcher brings it back.
+            continue
         ir.async_create_issue(
             hass,
             DOMAIN,
             issue_id(entry.entry_id, f.fab),
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
-            translation_key="appliance_not_set_up",
+            translation_key="appliance_unreachable" if f.transient else "appliance_not_set_up",
             translation_placeholders=issue_translation_placeholders(
-                f,
-                registered_appliance_name(hass, f.fab)
-                or model_label(device_types.get(f.fab)),
+                f, name or model_label(device_types.get(f.fab)),
             ),
         )
     # Only an appliance that set up is known to be fine again.

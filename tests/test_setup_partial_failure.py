@@ -236,38 +236,91 @@ def test_watcher_gets_the_known_addresses_of_missed_appliances(monkeypatch) -> N
     assert seen == [{off: "203.0.113.3", FLAKY: "203.0.113.2"}]
 
 
+class _TypedEntry(_Entry):
+    data = {
+        **_Entry.data,
+        "devices": [
+            {"fabNr": GOOD, "deviceType": 1},
+            {"fabNr": FLAKY, "deviceType": 2},
+            {"fabNr": "000100000003", "deviceType": 7},
+        ],
+    }
+
+
+def _issues_by_id(issues: list[dict]) -> dict[str, dict]:
+    return {i["issue_id"]: i for i in issues}
+
+
 def test_issue_names_appliances_like_home_assistant_does(monkeypatch) -> None:
     """The user's own device name first, then the type from the cloud list."""
     from custom_components.miele_lan.enrollment_report import FailedDevice
 
     off = "000100000003"
-
-    class _TypedEntry(_Entry):
-        data = {
-            **_Entry.data,
-            "devices": [
-                {"fabNr": GOOD, "deviceType": 1},
-                {"fabNr": FLAKY, "deviceType": 2},
-                {"fabNr": off, "deviceType": 7},
-            ],
-        }
-
     issues = _patch_setup(
-        monkeypatch, failed=[FailedDevice(fab=off, reason="no LAN IP found")]
+        monkeypatch,
+        failed=[FailedDevice(fab=off, reason="appliance answered but does not list this fab number")],
     )
     monkeypatch.setattr(
         miele_lan, "registered_appliance_name",
-        lambda hass, fab: "Downstairs dryer" if fab == FLAKY else None,
+        lambda hass, fab: "Downstairs dishwasher" if fab == off else None,
     )
 
     assert asyncio.run(miele_lan._setup_cloud(_Hass(), _TypedEntry())) is True
 
-    placeholders = {i["issue_id"]: i["translation_placeholders"] for i in issues}
-    assert placeholders[f"unenrolled_entry1_{off}"]["appliance"] == f"Dishwasher ({off})"
-    assert placeholders[f"unenrolled_entry1_{FLAKY}"]["name"] == "Downstairs dryer"
-    assert placeholders[f"unenrolled_entry1_{FLAKY}"]["appliance"] == (
-        f"Downstairs dryer ({FLAKY})"
+    by_id = _issues_by_id(issues)
+    assert by_id[f"unenrolled_entry1_{off}"]["translation_placeholders"]["appliance"] == (
+        f"Downstairs dishwasher ({off})"
     )
+    assert by_id[f"unenrolled_entry1_{FLAKY}"]["translation_placeholders"]["appliance"] == (
+        f"Tumble Dryer ({FLAKY})"
+    )
+
+
+def test_unreachable_appliance_that_is_set_up_raises_no_issue(monkeypatch) -> None:
+    """Seen with a PG8133 on a spotty connection: every reload that missed it
+    raised the issue, the next one cleared it. Its device and entities are in
+    Home Assistant, unavailable until it answers, and the watcher brings it
+    back; there is nothing for the user to fix. Its issue from before, if
+    any, is neither deleted nor raised again."""
+    issues = _patch_setup(monkeypatch)  # FLAKY fails its first refresh
+    monkeypatch.setattr(miele_lan, "registered_appliance_name", lambda hass, fab: "Dryer")
+
+    assert asyncio.run(miele_lan._setup_cloud(_Hass(), _Entry())) is True
+
+    assert issues == []
+    assert f"unenrolled_entry1_{FLAKY}" not in DELETED_ISSUES
+
+
+def test_unreachable_appliance_never_set_up_raises_the_unreachable_issue(monkeypatch) -> None:
+    """Nothing else in Home Assistant shows that this appliance exists."""
+    from custom_components.miele_lan.enrollment_report import FailedDevice
+
+    off = "000100000003"
+    issues = _patch_setup(
+        monkeypatch, failed=[FailedDevice(fab=off, reason="no LAN IP found", transient=True)],
+    )
+
+    assert asyncio.run(miele_lan._setup_cloud(_Hass(), _TypedEntry())) is True
+
+    issue = _issues_by_id(issues)[f"unenrolled_entry1_{off}"]
+    assert issue["translation_key"] == "appliance_unreachable"
+    assert issue["translation_placeholders"]["name"] == "Dishwasher"
+
+
+def test_failure_the_user_can_fix_raises_an_issue_even_when_set_up(monkeypatch) -> None:
+    from custom_components.miele_lan.enrollment_report import FailedDevice
+
+    off = "000100000003"
+    reason = "appliance belongs to household 1111111111111111, but this entry is 0123456789ABCDEF"
+    issues = _patch_setup(monkeypatch, failed=[FailedDevice(fab=off, reason=reason)])
+    monkeypatch.setattr(miele_lan, "registered_appliance_name", lambda hass, fab: "Dishwasher")
+
+    assert asyncio.run(miele_lan._setup_cloud(_Hass(), _TypedEntry())) is True
+
+    by_id = _issues_by_id(issues)
+    assert list(by_id) == [f"unenrolled_entry1_{off}"]  # not FLAKY, which is only unreachable
+    assert by_id[f"unenrolled_entry1_{off}"]["translation_key"] == "appliance_not_set_up"
+    assert by_id[f"unenrolled_entry1_{off}"]["translation_placeholders"]["reason"] == reason
 
 
 def test_only_an_appliance_that_set_up_has_its_issue_deleted(monkeypatch) -> None:

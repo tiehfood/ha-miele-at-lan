@@ -2376,7 +2376,11 @@
   "issues": {
     "appliance_not_set_up": {
       "title": "{name} konnte nicht eingerichtet werden",
-      "description": "Miele@LAN konnte {appliance} aus deinem Miele-Haushalt nicht einrichten:\n\n{reason}\n\nDas ist meist vorübergehend: Das Gerät ist ausgeschaltet oder seine WLAN-Verbindung ist abgerissen. Miele@LAN prüft weiter und richtet es von selbst ein, sobald es antwortet. Dieses Problem verschwindet dann."
+      "description": "{appliance} hat in deinem lokalen Netzwerk geantwortet, aber Miele@LAN konnte es nicht einrichten:\n\n{reason}\n\nDieses Problem verschwindet, sobald das Gerät eingerichtet ist. Miele@LAN versucht es erneut, wenn die Integration neu geladen wird, und von selbst, sobald das Gerät wieder antwortet."
+    },
+    "appliance_unreachable": {
+      "title": "Miele@LAN erreicht {name} nicht",
+      "description": "{appliance} gehört zu deinem Miele-Haushalt, aber Miele@LAN konnte es in deinem lokalen Netzwerk nicht erreichen, deshalb ist es in Home Assistant noch nicht eingerichtet:\n\n{reason}\n\nPrüfe, ob das Gerät eingeschaltet und mit dem WLAN verbunden ist. Wenn mDNS in deinem Netzwerk Home Assistant nicht erreicht, trage die IP-Adresse des Geräts in den Optionen der Integration ein.\n\nMiele@LAN prüft weiter und richtet das Gerät von selbst ein, sobald es antwortet. Dieses Problem verschwindet dann."
     }
   }
 }

@@ -16,6 +16,10 @@ class FailedDevice:
 
     fab: str
     reason: str
+    # True when the failure says nothing about the appliance's setup: it did
+    # not answer, or answered that it was busy. Nothing for the user to fix
+    # while it is set up in Home Assistant and merely unavailable.
+    transient: bool = False
 
 
 def summary_line(enrolled_count: int, failed: list[FailedDevice]) -> str:
