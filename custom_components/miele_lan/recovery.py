@@ -16,9 +16,12 @@ normal setup path:
   * a periodic re-check of those unenrolled addresses, for an appliance that
     announced itself but did not answer at that moment.
 
-Reloads are rate-limited per config entry (`MIN_RELOAD_GAP`, kept across
-reloads), so an appliance that keeps dropping off cannot make the
-integration reload in a loop.
+Reloads are rate-limited per config entry, and the limit is kept across the
+reloads themselves. The gap starts at `MIN_RELOAD_GAP` and doubles, up to
+`MAX_RELOAD_GAP`, after every recovery reload that did not bring its
+appliance back (see `note_setup_result`). An appliance that pushes but keeps
+failing its first refresh therefore cannot make the integration reload, and
+take every appliance unavailable, every few minutes.
 
 A reload briefly makes every appliance's entities unavailable. Adding the
 missed appliance's coordinator and entities in place would avoid that, but
@@ -32,6 +35,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable, Coroutine
+from dataclasses import dataclass
 from typing import Any
 
 from .const import DOMAIN, MIELE_SERVICE_TYPES
@@ -40,12 +44,59 @@ _LOGGER = logging.getLogger(__name__)
 
 CHECK_INTERVAL = 600.0  # seconds between re-checks of unenrolled addresses
 MIN_RELOAD_GAP = 300.0  # seconds between two recovery reloads of one entry
+MAX_RELOAD_GAP = 6 * 3600.0  # the gap stops growing here
 ANNOUNCE_DEBOUNCE = 5.0  # seconds to collect announcements before probing
 
-DATA_LAST_RECOVERY_RELOAD = f"{DOMAIN}_last_recovery_reload"
+DATA_RECOVERY_RELOADS = f"{DOMAIN}_recovery_reloads"
 
 Probe = Callable[[str], Awaitable[list[str]]]
 """Signed `GET /Devices` against an IP; returns the fab numbers it lists."""
+
+
+@dataclass
+class RecoveryReloads:
+    """Recovery reloads of one config entry, kept in `hass.data` so it
+    survives the reloads it schedules."""
+
+    last: float  # time.monotonic() of the last recovery reload
+    gap: float  # seconds the next recovery reload has to wait after `last`
+    pending: frozenset[str]  # fabs the last reload was for, until setup reports
+
+
+def note_setup_result(
+    hass: Any,
+    entry_id: str,
+    missing: set[str],
+    *,
+    min_gap: float = MIN_RELOAD_GAP,
+    max_gap: float = MAX_RELOAD_GAP,
+) -> None:
+    """Called at the end of every setup with the appliances it missed.
+
+    After a recovery reload that did not bring its appliance back, the gap
+    before the next one doubles; once that appliance is back, it starts
+    over. Each recovery reload is judged once, so a manual reload in between
+    does not grow the gap again.
+    """
+    reloads: dict[str, RecoveryReloads] = hass.data.setdefault(DATA_RECOVERY_RELOADS, {})
+    state = reloads.get(entry_id)
+    if state is None:
+        return
+    if not missing:
+        del reloads[entry_id]
+        return
+    if not state.pending:
+        return
+    still_missing = state.pending & missing
+    if still_missing:
+        state.gap = min(state.gap * 2, max_gap)
+        _LOGGER.info(
+            "the recovery reload did not bring back %s — the next one waits "
+            "at least %.0f min", ", ".join(sorted(still_missing)), state.gap / 60,
+        )
+    else:
+        state.gap = min_gap
+    state.pending = frozenset()
 
 
 class MissedApplianceWatcher:
@@ -129,7 +180,7 @@ class MissedApplianceWatcher:
         missed appliance (and a reload was requested)."""
         if fab not in self._missing:
             return False
-        self._request_reload(f"appliance {fab} pushed an update")
+        self._request_reload(f"appliance {fab} pushed an update", {fab})
         return True
 
     # ------------------------------------------------------------ internals
@@ -183,23 +234,29 @@ class MissedApplianceWatcher:
             found = self._missing.intersection(fabs)
             if found:
                 self._request_reload(
-                    f"appliance {', '.join(sorted(found))} answers at {ip}"
+                    f"appliance {', '.join(sorted(found))} answers at {ip}", found
                 )
                 return
 
-    def _request_reload(self, reason: str) -> None:
+    def _request_reload(self, reason: str, fabs: set[str]) -> None:
         if self._reload_requested:
             return
-        last = self._hass.data.setdefault(DATA_LAST_RECOVERY_RELOAD, {})
+        reloads: dict[str, RecoveryReloads] = self._hass.data.setdefault(
+            DATA_RECOVERY_RELOADS, {}
+        )
+        state = reloads.get(self._entry_id)
         now = time.monotonic()
-        since = now - last.get(self._entry_id, float("-inf"))
-        if since < self._min_reload_gap:
+        gap = state.gap if state is not None else self._min_reload_gap
+        if state is not None and now - state.last < gap:
             _LOGGER.info(
                 "%s, but the integration reloaded for a missed appliance %.0f s "
-                "ago — waiting for the next check", reason, since,
+                "ago — the next recovery reload waits until %.0f s have passed",
+                reason, now - state.last, gap,
             )
             return
         self._reload_requested = True
-        last[self._entry_id] = now
+        reloads[self._entry_id] = RecoveryReloads(
+            last=now, gap=gap, pending=frozenset(fabs)
+        )
         _LOGGER.warning("%s — reloading Miele@LAN to set it up", reason)
         self._hass.config_entries.async_schedule_reload(self._entry_id)

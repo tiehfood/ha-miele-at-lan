@@ -49,7 +49,7 @@ from .enrollment import (
     mdns_household_ids,
 )
 from .enrollment_report import FailedDevice, issue_translation_placeholders, summary_line
-from .recovery import MissedApplianceWatcher
+from .recovery import MissedApplianceWatcher, note_setup_result
 from .push_listener import (
     MielePushListener,
     PushEvent,
@@ -465,6 +465,7 @@ async def _setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # through a reload once they are reachable, instead of staying unavailable
     # until the user reloads by hand.
     missing = expected_fabs - set(bundle["coordinators"])
+    note_setup_result(hass, entry.entry_id, missing)
     if missing:
         watcher = MissedApplianceWatcher(
             hass=hass,

@@ -109,7 +109,10 @@ class _Entry:
         return asyncio.get_running_loop().create_task(coro)
 
 
-def test_flaky_first_refresh_leaves_only_that_appliance_out(monkeypatch) -> None:
+def _patch_setup(monkeypatch, *, failed=(), watcher=_Watcher) -> list[dict]:
+    """Patch everything `_setup_cloud` touches on the network: GOOD and FLAKY
+    enrol (FLAKY then fails its first refresh), `failed` could not be
+    enrolled. Returns the repair issues raised."""
     issues: list[dict] = []
 
     async def _zc(hass):
@@ -121,7 +124,7 @@ def test_flaky_first_refresh_leaves_only_that_appliance_out(monkeypatch) -> None
     async def _enroll_all(*args, **kwargs):
         return EnrollmentResult(
             enrolled=[_enrolled(GOOD, "203.0.113.1"), _enrolled(FLAKY, "203.0.113.2")],
-            failed=[],
+            failed=list(failed),
         )
 
     async def _cleanup(**kwargs):
@@ -133,7 +136,7 @@ def test_flaky_first_refresh_leaves_only_that_appliance_out(monkeypatch) -> None
     monkeypatch.setattr(miele_lan, "cleanup_stale_subscriptions", _cleanup)
     monkeypatch.setattr(miele_lan, "MielePushListener", _Listener)
     monkeypatch.setattr(miele_lan, "MieleLanCoordinator", _Coordinator)
-    monkeypatch.setattr(miele_lan, "MissedApplianceWatcher", _Watcher)
+    monkeypatch.setattr(miele_lan, "MissedApplianceWatcher", watcher)
     monkeypatch.setattr(miele_lan, "async_get_clientsession", lambda hass: None)
     monkeypatch.setattr(
         miele_lan.MieleLanClient, "from_hex",
@@ -146,7 +149,11 @@ def test_flaky_first_refresh_leaves_only_that_appliance_out(monkeypatch) -> None
     monkeypatch.setattr(miele_lan.ir, "async_delete_issue", lambda *a, **k: None)
     _Client.closed.clear()
     _Watcher.created.clear()
+    return issues
 
+
+def test_flaky_first_refresh_leaves_only_that_appliance_out(monkeypatch) -> None:
+    issues = _patch_setup(monkeypatch)
     hass = _Hass()
 
     async def _main():
@@ -164,3 +171,23 @@ def test_flaky_first_refresh_leaves_only_that_appliance_out(monkeypatch) -> None
     assert len(issues) == 1
     assert FLAKY in issues[0]["translation_placeholders"]["devices"]
     assert "first refresh failed" in issues[0]["translation_placeholders"]["devices"]
+
+
+def test_setup_tells_the_recovery_backoff_what_it_missed(monkeypatch) -> None:
+    """The recovery reload was for FLAKY, and setup missed it again: the gap
+    before the next recovery reload has to grow."""
+    from custom_components.miele_lan.recovery import (
+        DATA_RECOVERY_RELOADS,
+        RecoveryReloads,
+    )
+
+    _patch_setup(monkeypatch)
+    hass = _Hass()
+    hass.data[DATA_RECOVERY_RELOADS] = {
+        "entry1": RecoveryReloads(last=0.0, gap=300.0, pending=frozenset({FLAKY})),
+    }
+
+    assert asyncio.run(miele_lan._setup_cloud(hass, _Entry())) is True
+
+    assert hass.data[DATA_RECOVERY_RELOADS]["entry1"].gap == 600.0
+

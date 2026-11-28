@@ -6,15 +6,20 @@ signed `GET /Devices`.
 """
 
 import asyncio
+import itertools
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from custom_components.miele_lan import recovery as recovery_mod  # noqa: E402
 from custom_components.miele_lan.recovery import (  # noqa: E402
-    DATA_LAST_RECOVERY_RELOAD,
+    DATA_RECOVERY_RELOADS,
+    MAX_RELOAD_GAP,
+    MIN_RELOAD_GAP,
     MissedApplianceWatcher,
+    note_setup_result,
 )
 
 GROUP = "0123456789ABCDEF"
@@ -124,7 +129,7 @@ def test_reloads_are_rate_limited_across_reloads() -> None:
     second.notify_push(MISSING)
 
     assert hass.config_entries.reloads == ["entry1"]
-    assert hass.data[DATA_LAST_RECOVERY_RELOAD]["entry1"]
+    assert hass.data[DATA_RECOVERY_RELOADS]["entry1"].pending == {MISSING}
 
 
 def test_announcement_of_missed_appliance_reloads(monkeypatch) -> None:
@@ -218,3 +223,70 @@ def test_nothing_missing_starts_nothing(monkeypatch) -> None:
     _run(_main)
 
     assert hass.config_entries.reloads == []
+
+
+class _Clock:
+    def __init__(self, monkeypatch) -> None:
+        self.now = 1000.0
+        monkeypatch.setattr(recovery_mod.time, "monotonic", lambda: self.now)
+
+
+def _setup_then_push_until_reload(hass, clock, missing: set[str]) -> float:
+    """One setup that missed `missing`, then a push from MISSING every
+    minute until one schedules a reload. Returns the time of that reload."""
+    note_setup_result(hass, "entry1", missing)
+    watcher = _watcher(hass)
+    before = len(hass.config_entries.reloads)
+    for _ in range(24 * 60):
+        watcher.notify_push(MISSING)
+        if len(hass.config_entries.reloads) > before:
+            return clock.now
+        clock.now += 60
+    raise AssertionError("no reload within a day")
+
+
+def test_gap_grows_while_recovery_reloads_do_not_bring_the_appliance_back(
+    monkeypatch,
+) -> None:
+    """Seen with a dryer that pushes but answers `GET /State` with 404 during
+    every first refresh: each push used to reload the entry every 5 minutes,
+    taking every appliance unavailable each time."""
+    clock = _Clock(monkeypatch)
+    hass = _FakeHass()
+
+    reload_times = [_setup_then_push_until_reload(hass, clock, {MISSING}) for _ in range(9)]
+
+    gaps = [b - a for a, b in itertools.pairwise(reload_times)]
+    assert gaps == [
+        2 * MIN_RELOAD_GAP, 4 * MIN_RELOAD_GAP, 8 * MIN_RELOAD_GAP,
+        16 * MIN_RELOAD_GAP, 32 * MIN_RELOAD_GAP, 64 * MIN_RELOAD_GAP,
+        MAX_RELOAD_GAP, MAX_RELOAD_GAP,
+    ]
+
+
+def test_gap_grows_once_per_recovery_reload_not_per_setup(monkeypatch) -> None:
+    _Clock(monkeypatch)
+    hass = _FakeHass()
+    _watcher(hass).notify_push(MISSING)
+
+    note_setup_result(hass, "entry1", {MISSING})  # the recovery reload's setup
+    note_setup_result(hass, "entry1", {MISSING})  # a manual reload after it
+
+    assert hass.data[DATA_RECOVERY_RELOADS]["entry1"].gap == 2 * MIN_RELOAD_GAP
+
+
+def test_gap_starts_over_once_the_appliance_is_back(monkeypatch) -> None:
+    clock = _Clock(monkeypatch)
+    hass = _FakeHass()
+    _setup_then_push_until_reload(hass, clock, {MISSING})
+    _setup_then_push_until_reload(hass, clock, {MISSING})
+    assert hass.data[DATA_RECOVERY_RELOADS]["entry1"].gap == 2 * MIN_RELOAD_GAP
+
+    # This reload brought it back; another appliance is still missing.
+    note_setup_result(hass, "entry1", {"000100000003"})
+    assert hass.data[DATA_RECOVERY_RELOADS]["entry1"].gap == MIN_RELOAD_GAP
+
+    # A setup with nothing missing forgets the history altogether.
+    note_setup_result(hass, "entry1", set())
+    assert "entry1" not in hass.data[DATA_RECOVERY_RELOADS]
+
